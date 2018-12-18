@@ -1,0 +1,2635 @@
+#property copyright    "Copyright 2017. 汇商琅琊榜"
+#property description  "【授权日期】 2088.01.01      【账户类型】 实盘、模拟"
+#property description  "================================="
+#property description  "【合作模式】 贴牌、定制、租用、指导\n【联系方式】 老徐 QQ：45997279  Tel：13605336651"
+#property icon         "\\Images\\LaoXu\\ico_laoxu.ico"       //logo 必须是ico格式
+#property copyright    "Copyright 2018, LaoXu Software Corp."
+#property link         "http://www.langyabang.com"
+#property  strict
+//=========================== 帐号授权以及日期限制设置 ===========================
+//按照以下格式输入MT4实盘数字帐号,以","间隔
+int myMT4Account[]=
+{
+   111111,  //万能账户，所有账户有效，注释掉则不支持任意实盘账户
+   123456,  //其他需要授权的账户，MT4数字帐号，例如888888  
+   999999,  //模拟账户，所有模拟账户有效，注释掉则不支持任意模拟账户。！！必须在最后一行。 
+};
+string AuthorizeTime="2019.3.1 00:00";  //按照此格式输入截止时间
+//=========================== 帐号授权以及日期限制结束 ===========================
+//===========================     外部输入变量部分     ===========================
+//所有外部预设变量全部以npt开头,即npt_
+extern  string              npt_note01="===系统参数===";      //===系统参数===
+extern  string              npt_Comment       = "烈燃星空";   //请输入备注信息
+extern  int                 npt_MagicNumber   = 16888;        //订单识别号
+extern  bool                npt_SystemBegin   = true;         //系统运行初始状态（true 启动 false 暂停）
+extern  color               npt_BGColor       = clrDarkBlue;  //背景颜色选择
+extern  string              npt_note03="===控仓参数===";   //===控仓参数===
+extern  double              npt_Lots           = 0.1;       //开仓手数
+extern  double              npt_Chazhi         = 0.01;      //加仓差值
+extern  int                 npt_Interval       = 200;       //挂单距离
+extern  ENUM_TIMEFRAMES     npt_Move_Timeframe = PERIOD_M5; //挂单移动根据收盘价的时间周期
+//===========================     系统状态常用结构体变量     ===========================
+struct SystemStatus
+{
+   bool     run;            //系统是否运行
+      
+   double   accmaxprofit;   //账户最大浮盈
+   double   accmaxloss;     //账户最大浮亏
+   double   eamaxprofit;    //EA最大浮盈
+   double   eamaxloss;      //EA最大浮亏
+   
+   datetime pendingtime;    //挂单时间
+   //---系统图片
+   color    colorback;      //菜单按钮底色
+   color    coloredit;      //编辑框颜色
+   color    colorselect;    //选中的颜色
+   SystemStatus()
+   {
+      colorback     = clrGray;       //菜单按钮底色
+      coloredit     = clrRosyBrown;  //编辑框颜色
+      colorselect   = clrSteelBlue;  //选中的颜色
+   } 
+};  
+SystemStatus  SS;      //系统运行状态
+//--- 账户信息
+struct  AccountInfo
+{
+    bool        trade_allowed;      //是否允许交易
+    bool        trade_expert;       //是否允许智能交易
+};
+//--- 商品信息
+struct  SymbolInfo
+{
+    double      bid;                    //卖出报价
+    double      ask;                    //买入报价
+    double      point;                  //报价单位
+    double      trade_tick_value;       //单点价值
+    int         trade_stop_level;       //停止水平
+    string      symbol;                 //商品名称
+    int         digits;                 //报价小数位数
+    int         spread;                 //点差 
+    double      volume_min;             //最小建仓量
+    double      volume_max;             //最大建仓量  
+    datetime    time;                   //最后报价时间         
+};
+//--- 持仓单信息
+struct  TradesOrders
+{
+    int         ticket;         //订单号
+    string      symbol;         //商品名称
+    datetime    opentime;       //建仓时间
+    int         type;           //订单类型
+    double      lots;           //建仓量
+    double      openprice;      //建仓价
+    double      stoploss;       //止损价
+    double      takeprofit;     //止盈价
+    double      profit;         //利润
+    double      commission;     //佣金
+    double      swap;           //利息
+    string      comment;        //注释
+    int         magicnumber;    //程序识别码
+    double      cost;           //成本
+    datetime    expiration;     //挂单结束时间
+};
+//--- 持仓单统计
+struct  TradesStatistical
+{
+    string      symbol;                 //商品名称
+    int         buy_orders;             //Buy单数量总计
+    int         buy_profit_orders;      //Buy盈利单数量（外加）
+    double      buy_profit_total;       //Buy盈利单盈利合计（外加）
+    int         buy_loss_orders;        //Buy亏损单数量（外加）
+    double      buy_loss_total;         //Buy亏损单亏损合计（外加）
+    int         buylimit_orders;        //BuyLimit单数量总计
+    int         buystop_orders;         //BuyStop单数量总计
+    double      buy_grp_lots;           //Buy组成交持仓单建仓量总计
+    double      buy_grp_profit;         //Buy组成交持仓单利润总计
+    double      buy_grp_avg;            //Buy组均价
+    double      buy_grp_margin;         //Buy组保证金占用
+    double      buy_grp_risk;           //Buy组风险值
+    double      buy_grp_cost;           //Buy组成本
+
+    int         sell_orders;            //Sell单数量总计
+    int         sell_profit_orders;     //Sell盈利单数量（外加）
+    double      sell_profit_total;      //Sell盈利单盈利合计（外加）
+    int         sell_loss_orders;       //Sell亏损单数量（外加）
+    double      sell_loss_total;        //Sell亏损单亏损合计（外加）
+    int         selllimit_orders;       //SellLimit单数量总计
+    int         sellstop_orders;        //SellStop单数量总计
+    double      sell_grp_lots;          //Sell组成交持仓单建仓量总计
+    double      sell_grp_profit;        //Sell组成交持仓单利润总计
+    double      sell_grp_avg;           //Sell组均价
+    double      sell_grp_margin;        //Sell组保证金占用
+    double      sell_grp_risk;          //Sell组风险值
+    double      sell_grp_cost;          //Sell组成本
+
+    double      max_floating_profit;    //最大浮盈
+    double      max_floating_loss;      //最大浮亏
+    double      max_margin;             //最大保证金占用
+    double      account_increment;      //余额增量
+    double      current_profit;         //本轮净利
+    double      max_lots;               //最大可建仓量    
+};
+//菜单显示变量
+struct MenuStatus
+{
+   string  namebutton;  //菜单的按钮名称
+   string  nametrue;    //菜单显示时名字
+   string  namefalse;   //菜单隐藏时名字
+   bool    shownow;     //显示状态
+   bool    showlast;    //上次显示状态
+   string  ver;         //版本信息
+   string  writer;      //作者
+   double  oldbid;      //旧报价
+}; 
+struct  MenuMove  //控制面板菜单移动用结构体
+  {
+    int x;
+    int y;
+    string name;
+  };
+struct ButtonStatus
+{
+   string  name;        //按钮名称，控制用
+   int     property;    //按钮属性 按键 切换
+   bool    status;      //按钮状态
+   string  help;        //提示信息
+   string  nametrue;    //真时显示的按钮名字
+   string  namefalse;   //假时显示的按钮名字
+   string  texttrue;    //真时输出的信息
+   string  textfalse;   //假时输出的信息
+   color   colortrue;   //真时的按钮底色
+   color   colorfalse;  //假时的按钮底色
+   color   backcolor;   //背景色
+   color   bordercolor; //边框色
+   int     fontsize;    //显示文字大小
+   string  font;        //字体
+   string  edit;        //需要编辑的内容
+   int     x;           //位置x
+   int     y;           //位置y
+   int     k;           //宽
+   int     g;           //高
+};
+struct EditStatus
+{
+   string  name;        //按钮名称，控制用
+   string  text;        //显示标题内容
+   bool    status;      //按钮状态，可编辑和不可编辑
+   string  help;        //提示信息
+   color   backcolor;   //背景色
+   color   bordercolor; //边框色
+   int     fontsize;    //显示文字大小
+   string  font;        //字体
+   string  edit;        //需要编辑的内容
+   int     type;        //编辑的类型,数据要求0 int 1 double 2 sting
+   int     digits;      //位数
+   int     x;           //位置x
+   int     y;           //位置y
+   int     k;           //宽
+   int     g;           //高
+};
+//菜单显示变量
+struct MenuControl
+{
+   string   text;        //菜单名字,显示用
+   string   name;        //菜单名字，控制用
+   string   onoff;       //开关名字
+   string   pause;       //暂停按钮
+   string   close;       //关闭按钮
+   bool     now;         //显示状态
+   bool     last;        //上次显示状态,控制刷新用
+   int      width;       //菜单宽
+   int      height;      //菜单高
+   int      heightlast;  //菜单上一次高
+   bool     right;       //是否在右边
+   int      mystart;     //显示开始的位置
+   int      myend;       //显示结束的位置
+   int      line;        //显示时的行数
+   int      lineall;     //需要显示的全部行数
+   bool     moveallow;   //是否允许移动
+   int      x;           //移动前x位置
+   int      y;           //移动前y位置
+   int      x_new;       //移动后x的新位置
+   int      y_new;       //移动后y的新位置
+   int      x_last;      //移动前x的原位置
+   string   message[2];  //显示提示消息
+   MenuMove move[];      //移动菜单的按钮名称和位置管理
+   ButtonStatus BS[];    //本菜单的各按钮状态
+   EditStatus   ES[];    //编辑框
+};    
+//===========================     窗口参数变量     ===========================
+MenuControl  MC[1];  //主菜单窗口定义
+long    lxChartID    = ChartID();                                           //图表ID
+string  lxPrefix     = MQLInfoString(MQL_PROGRAM_NAME); //程序名作为对象名前缀关键字，以便批量删除，不影响其他对象
+int     lxPeroidLast = ChartPeriod();  //EA加载窗口的初始时间周期，处理时间周期切换用
+string  lxPrompt[10];  //右侧显示的提示信息
+int     lxWidth[10];   //右侧显示的提示信息
+//===========================     全局变量定义    ==================================
+string  gvName="lx"+(string)AccountInfoInteger(ACCOUNT_LOGIN)+"_"+Symbol();
+string  gv_main_maxprofit_all=gvName+"main_maxprofit_all";  //最大浮盈
+string  gv_main_maxloss_all  =gvName+"main_maxloss_all";    //最大浮亏
+string  gv_main_maxprofit_acc=gvName+"main_maxprofit_acc";  //最大浮盈
+string  gv_main_maxloss_acc  =gvName+"main_maxloss_acc";    //最大浮亏
+//===========================  订单变量定义  ===========================
+AccountInfo          AI;     //账户信息变量
+SymbolInfo           SI;     //商品信息变量 
+TradesOrders         TO[];   //本账户、本币、本EA所管理的持仓单变量
+TradesStatistical    TS;     //持仓单统计变量
+int                  lxTradingDelay = 5000;   //交易延时变量,5000毫秒
+int                  lxCloseTicket[200];      //平仓订单号数组变量,固定200条记录
+//===========================  变量定义结束  ===========================
+/*
+函    数:总流程
+输出参数:true-可执行，false-不可执行
+算    法:
+*/
+bool lxMain() //主程序
+{
+    if (lxVerify() !=0 || Bars < 100)  return(false);
+//--- 数据刷新   
+    lxDataRefresh();
+//--- 主菜单 
+    lxMenu_Main();
+//--- 顶部持仓信息   
+    lxMenu_Top(SS.accmaxprofit,SS.accmaxloss,lxPrefix,clrRed,clrLime,clrRed);  //顶部信息开关      
+//--- 右侧持仓信息    
+    lxMenu_Right(TS,lxChartID,lxPrefix);  
+//--- 平仓部分   
+    lxOrderClose();      
+//--- 回测程序   
+    lxTestButton();      
+//--- 平仓优先和部分平仓优先
+    if (lxArrayClose(lxCloseTicket,lxTradingDelay))  return(true); 
+    if (SS.run == false)  return(false); 
+//--- 开仓条件   
+    lxOrderRule();
+    return(true);
+}
+/*
+函    数:数据刷新
+输出参数:
+算    法:刷新所有数据
+*/
+void lxDataRefresh()
+{
+    lxRefreshEV_laoxu(AI,SI);                   //刷新环境变量
+    //刷新本EA所开本商品持仓单数组，分为接管和不接管
+    lxRefreshTO_laoxu(TO,SI.symbol,npt_MagicNumber);  
+    lxRefreshTS_laoxu(TO ,TS ,AI,SI);     //统计持仓单信息 
+    if (OrdersTotal() > 200)  {ArrayResize(lxCloseTicket,OrdersTotal());}
+    //记录最大浮亏和最大浮盈的值  
+    //本EA最大浮亏
+    if (TS.max_floating_loss >= TS.buy_grp_profit + TS.sell_grp_profit && TS.buy_grp_profit + TS.sell_grp_profit < 0)
+    {   
+        TS.max_floating_loss =  TS.buy_grp_profit + TS.sell_grp_profit;
+        GlobalVariableSet(gv_main_maxloss_all,TS.max_floating_loss);
+    }
+    //EA最大浮盈
+    if (TS.max_floating_profit < TS.buy_grp_profit + TS.sell_grp_profit && TS.buy_grp_profit + TS.sell_grp_profit > 0)
+    {   
+        TS.max_floating_profit = TS.buy_grp_profit + TS.sell_grp_profit;
+        GlobalVariableSet(gv_main_maxprofit_all,TS.max_floating_profit);
+    }       
+    //账户最大浮亏
+    if (SS.accmaxloss >= AccountProfit() && AccountProfit() < 0)
+    {   
+        SS.accmaxloss =  AccountProfit();GlobalVariableSet(gv_main_maxloss_acc,SS.accmaxloss);
+    }      
+    //账户最大浮盈
+    if (SS.accmaxprofit < AccountProfit() && AccountProfit() > 0)
+    {   
+        SS.accmaxprofit = AccountProfit();GlobalVariableSet(gv_main_maxprofit_acc,SS.accmaxprofit);
+    } 
+}   
+int OnInit() //程序初始运行一次
+{
+//===========================  模板用固定变量及设置定义开始  ==================================     
+    if (TerminalInfoInteger(TERMINAL_TRADE_ALLOWED) == false)  Alert("请打开MT4的允许自动交易或直接按Ctrl+E！");  
+    if (lxPeroidLast == ChartPeriod())  //如果周期没变刷新程序
+    {
+        lxObjectsDeleteByKeyword(lxChartID,lxPrefix);  //删除或重复加载时删除旧的对象
+        SS.run = npt_SystemBegin;                      //系统运行初始状态
+        //--- 设置图表属性值  
+        ChartSetInteger(lxChartID,CHART_EVENT_MOUSE_MOVE,true);    //检测鼠标移动位置为允许 
+        ChartSetInteger(lxChartID,CHART_FOREGROUND,false);         //在K线图上方
+        ChartSetInteger(lxChartID,CHART_MODE,CHART_CANDLES);       //k线形态：蜡烛图
+        ChartSetInteger(lxChartID,CHART_SHIFT,true);               //图表左移 
+        ChartSetInteger(lxChartID,CHART_AUTOSCROLL,true);          //自动移向图表的右边框   
+        ChartSetInteger(lxChartID,CHART_SHOW_GRID,0,false);        //禁止显示网格  
+        if (AccountInfoInteger(ACCOUNT_LIMIT_ORDERS) > 200) 
+        {
+           ArrayResize(lxCloseTicket,(int)AccountInfoInteger(ACCOUNT_LIMIT_ORDERS));
+        }        
+        if (GlobalVariableCheck(gv_main_maxprofit_all))  TS.max_floating_profit =GlobalVariableGet(gv_main_maxprofit_all);
+        if (GlobalVariableCheck(gv_main_maxloss_all  ))  TS.max_floating_loss   =GlobalVariableGet(gv_main_maxloss_all  );
+        if (GlobalVariableCheck(gv_main_maxprofit_acc))  SS.accmaxprofit=GlobalVariableGet(gv_main_maxprofit_acc);
+        if (GlobalVariableCheck(gv_main_maxloss_acc  ))  SS.accmaxloss  =GlobalVariableGet(gv_main_maxloss_acc  );
+        //---  控制面板主菜单显示和编辑部分
+        MC[0].name = lxPrefix+"Main_";MC[0].now = true;MC[0].last = !MC[0].now;MC[0].width = lxScale(220);  
+        MC[0].onoff = MC[0].name+"onoff";MC[0].pause = MC[0].name+"pause";MC[0].close = MC[0].name+"close";
+        //---  按钮变量定义
+        ArrayResize(MC[0].BS,6);  
+        //菜单、按钮、按钮属性（执行或切换）、按钮状态、按钮名称、真时的按钮底色、假时的按钮底色、真时显示的按钮名字、假时显示的按钮名字
+        //真时输出的信息、假时输出的信息、提示信息、编辑框内容、显示文字大小、字体、背景色、边框色
+        lxButton_Input(MC[0],MC[0].BS[0],0,true,"closebuy",  clrGray, clrGray,"平仓多单","平仓多单","","","平仓本程序管理持仓多单");  
+        lxButton_Input(MC[0],MC[0].BS[1],0,true,"closesell", clrGray, clrGray,"平仓空单","平仓空单","","","平仓本程序管理持仓空单"); 
+        lxButton_Input(MC[0],MC[0].BS[2],0,true,"delpending",clrGray, clrGray,"删除挂单","删除挂单","","","删除本程序所有挂单");  
+        lxButton_Input(MC[0],MC[0].BS[3],0,true,"clearall",  clrGray, clrGray,"一键清仓","一键清仓","","","清仓本账户所有持仓单"); 
+        lxButton_Input(MC[0],MC[0].BS[4],0,true,"openbuy",   clrGray, clrGray,"开仓多单","开仓多单","","","删除本程序所有挂单");  
+        lxButton_Input(MC[0],MC[0].BS[5],0,true,"opensell",  clrGray, clrGray,"开仓空单","开仓空单","","","清仓本账户所有持仓单"); 
+        //---  编辑框变量定义
+        ArrayResize(MC[0].ES,3);  
+        //菜单、编辑框、编辑框名称、编辑框前的文字、内容、类型、位数
+        lxEdit_Input(MC[0],MC[0].ES[0],"lots",    "手数",DoubleToStr(npt_Lots,    2),1,2); 
+        lxEdit_Input(MC[0],MC[0].ES[1],"multiple","差值",DoubleToStr(npt_Chazhi,2),1,2); 
+        lxEdit_Input(MC[0],MC[0].ES[2],"interval","距离",(string)npt_Interval,0); 
+        //---  右侧显示的提示信息
+        lxPrompt[0] = "Sell、SellLimit、SellStop单数量";lxPrompt[1] = "空单手数";lxPrompt[2] = "空单盈亏";lxPrompt[3] = "空单均价";
+        lxPrompt[4] = "Buy、BuyLimit、BuyStop单数量";   lxPrompt[5] = "多单手数";lxPrompt[6] = "多单盈亏";lxPrompt[7] = "多单均价";
+        lxPrompt[8] = "本程序最大浮亏"; lxPrompt[9] = "本程序最大浮盈";
+        for (int i=0;i<8; i++)  lxWidth[i] = 60;
+        for (int i=8;i<10;i++)  lxWidth[i] = 100;
+        lxWidth[0]=lxWidth[4]=190;
+//===========================  模板用固定变量及设置定义结束  ==================================            
+
+    }
+    lxPeroidLast = ChartPeriod();
+    EventSetTimer(1);//EventSetMillisecondTimer(500);
+    lxMain();
+    return(INIT_SUCCEEDED);
+}
+void OnDeinit(const int reason)
+{
+   switch(reason)
+   {
+       case REASON_CHARTCHANGE : break;  //更改交易品种或图表周期
+       case REASON_RECOMPILE   : break;  //重新编译
+       case REASON_CLOSE       : lxObjectsDeleteByKeyword(lxChartID,lxPrefix); //--- 清空所有本程序产生的对象和信息，关闭图表
+       default                 : lxObjectsDeleteByKeyword(lxChartID,lxPrefix); //--- 清空所有本程序产生的对象和信息
+   }   
+   EventKillTimer();
+   return;
+}
+void lxTestButton()
+{  
+   if (IsTesting() == true)
+   {
+      //---  模板标准按钮回测用程序部分开始             
+      if (ObjectGetInteger(0,MC[0].onoff,OBJPROP_STATE,true))  //主控开关
+      {
+         lxTrueFalseExchange(MC[0].now);
+         if (MC[0].now == true )  {lxObjectsDeleteByKeyword(lxChartID,MC[0].onoff);MC[0].last = !MC[0].now;lxMenu_Main();} //如果点击控制面板总开关
+         if (MC[0].now == false)  {lxObjectsDeleteByKeyword(lxChartID,MC[0].name);lxButtonOut(true,lxChartID,MC[0].onoff,0,MC[0].x + lxScale(8),MC[0].y + lxScale(21),lxScale(20),lxScale(20),CORNER_LEFT_UPPER,"－","Arial",14,clrWhite,clrRed,clrWhite);}
+         ObjectSetInteger(lxChartID,MC[0].onoff,OBJPROP_STATE,false);  
+      } 
+      if (ObjectGetInteger(lxChartID,MC[0].pause,OBJPROP_STATE,true))  //运行暂停开关
+      {
+         lxTrueFalseExchange(SS.run);
+         if (SS.run == true )  {ObjectSetInteger(lxChartID,MC[0].pause,OBJPROP_BGCOLOR,clrGreen);lxMessage(MC[0].message,"EA系统启动！");}
+         if (SS.run == false)  {ObjectSetInteger(lxChartID,MC[0].pause,OBJPROP_BGCOLOR,clrRed  );lxMessage(MC[0].message,"EA系统停止！");}
+         ObjectSetInteger(lxChartID,MC[0].pause,OBJPROP_STATE,false); 
+      } 
+      if (ObjectGetInteger(lxChartID,MC[0].BS[0].name,OBJPROP_STATE,true))  //一键平仓
+      {
+          if (TS.buy_orders+TS.sell_orders==0)  {lxMessage(MC[0].message,"【"+SI.symbol+"无相应持仓单】");}
+          else  
+          {
+             if (lxCloseByCondition(TO,lxCloseTicket,9,9) && lxArrayClose(lxCloseTicket,5000))  
+             {
+                lxMessage(MC[0].message,"【平仓持仓单"+(string)(TS.buy_orders+TS.sell_orders)+"张】");
+             }
+          }
+          ObjectSetInteger(lxChartID,MC[0].BS[0].name,OBJPROP_STATE,false);
+      }
+      if (ObjectGetInteger(lxChartID,MC[0].BS[1].name,OBJPROP_STATE,true))  //一键清仓
+      {
+          if (OrdersTotal()==0)  {lxMessage(MC[0].message,"【"+SI.symbol+"无相应持仓单】");}
+          else  
+          {
+             int myTotal = OrdersTotal();
+             TradesOrders myTO[];
+             lxRefreshTO_laoxu(myTO,"*",-1);  
+             if (lxCloseByCondition(myTO,lxCloseTicket,9,9) && lxArrayClose(lxCloseTicket,5000))  
+             {
+                lxMessage(MC[0].message,"【清仓账户持仓单"+(string)myTotal+"张】");
+             }
+          }
+          ObjectSetInteger(lxChartID,MC[0].BS[1].name,OBJPROP_STATE,false);
+      }       
+    } 
+    return;    
+}
+void OnTimer()
+{
+    //---  //刷新主菜单的时间
+    /*
+    if (MC[0].now == true)
+    {  
+      string myTime = TimeToStr(TimeCurrent(),TIME_SECONDS) + "  星期" + lxTimeWeekToText(TimeDayOfWeek(TimeCurrent())); //主标题内容
+      color  myColor = clrWhite;
+      if (SS.runtime)  myColor = clrLime;  else  myColor = clrRed;
+      lxLableOut(true,myTime,MC[0].name+"time",10,myColor,0,0,0,MC[0].x + lxScale(110),MC[0].y + lxScale(22),"微软雅黑");      
+    } 
+    */
+}
+void OnTick() //价格每波动一次，循环一次
+{
+   lxMain();
+   return;
+}
+void OnChartEvent(const int     id,
+                  const long   &lparam,
+                  const double &dparam,
+                  const string &sparam
+                  )
+{
+   if (id == CHARTEVENT_MOUSE_MOVE)
+   {
+      //---  主菜单显示时的按钮变化和移动处理
+      if (MC[0].now == true)
+      {
+         //打开按钮辅助提示
+         lxPromptMessage(lparam,dparam,MC[0].pause,"启动暂停本程序");//主控菜单的帮助提示
+         lxPromptMessage(lparam,dparam,MC[0].close,"退出本程序");//主控菜单的帮助提示         
+         lxButton_TextColor(lxChartID,lparam,dparam,MC[0].onoff,clrLightSlateGray,clrWhite);  //隐藏按钮
+         lxButton_TextSize(lxChartID,lparam,dparam,MC[0].pause,16,18);                        //暂停运行按钮
+         lxButton_CloseColor(lxChartID,lparam,dparam,MC[0].close,20);                         //关闭本窗口按钮
+         for (int i=0;i<ArraySize(MC[0].BS);i++)  
+         {
+             if (MC[0].BS[i].property ==0)  lxButton_BackColor(lxChartID,lparam,dparam,MC[0].BS[i].name,clrGray,clrSteelBlue,10,12);
+             if (MC[0].BS[i].property ==1)  lxButton_TextSize(lxChartID,lparam,dparam,MC[0].BS[i].name,10,12);
+         }         
+      }
+      if (ObjectGetInteger(lxChartID,lxPrefix + "symbol",OBJPROP_STATE,true)==true)
+      {
+          for (int i=0;i<10;i++)  lxPromptMessage_Width(lparam,dparam,lxPrefix + "Right_"+(string)i,lxPrompt[i],lxWidth[i]);      
+      }      
+      for (int i=0;i<ArraySize(MC);i++) lxMenuMoveByItem(lparam,dparam,sparam,MC[i],true,false);  //各个菜单的移动管理
+      if ((uint)sparam != 1)  {for(int i=0;i<ArraySize(MC);i++)  MC[i].x_last = MC[i].x;}     //多个菜单移动时用这个,画线画框避免拖动时开仓 
+//===========================  模板固定移动程序部分结束  ==================================  
+   }
+   if (id == CHARTEVENT_OBJECT_ENDEDIT)
+   {
+       for(int i=0;i<ArraySize(MC[0].ES);i++) if(sparam == MC[0].ES[i].name) lxEditES(lxChartID,MC[0].ES[i]);
+   }
+   if (id == CHARTEVENT_OBJECT_CLICK  && lxMC_X_Last())
+   {
+      //---  模板标准按钮开始
+      int i = 0; //循环计数器变量
+      if (sparam == MC[0].onoff)  //主控开关显示隐藏主菜单
+      {
+          lxTrueFalseExchange(MC[0].now);
+          if (MC[0].now == true ) {lxObjectsDeleteByKeyword(lxChartID,MC[0].onoff);MC[0].last = !MC[0].now;lxMenu_Main();} //如果点击控制面板总开关
+          if (MC[0].now == false) 
+          {   
+              lxObjectsDeleteByKeyword(lxChartID,MC[0].name);
+              lxButtonOut(true,lxChartID,MC[0].onoff,0,MC[0].x + lxScale(8),MC[0].y + lxScale(20),lxScale(20),lxScale(20),CORNER_LEFT_UPPER,"－","Arial",14,clrWhite,clrRed,clrWhite);
+              ChartSetInteger(0,CHART_MOUSE_SCROLL,0,true);
+          } 
+      } 
+      if (sparam == MC[0].pause)  //运行暂停开关
+      {
+          lxTrueFalseExchange(SS.run);
+          if (SS.run == true )  {ObjectSetInteger(lxChartID,MC[0].pause,OBJPROP_COLOR,clrLime);lxMessage(MC[0].message,"EA系统启动！");}
+          if (SS.run == false)  {ObjectSetInteger(lxChartID,MC[0].pause,OBJPROP_COLOR,clrRed );lxMessage(MC[0].message,"EA系统停止！");}
+      }       
+      if (sparam == MC[0].close+"bt" && MessageBox("注意：强制退出本EA！！！\n\n请再次确认是否执行？", "退出本EA",MB_YESNO)==IDYES)  //退出程序
+      {
+          lxObjectsDeleteByKeyword(lxChartID,lxPrefix);ExpertRemove();
+      }       
+      if (sparam==MC[0].BS[0].name)  //平仓多单
+      {
+          if (TS.buy_orders==0)  {lxMessage(MC[0].message,"【"+SI.symbol+"无相应持仓单】");}
+          else  
+          {
+             if (   MessageBox("注意：即将平仓"+SI.symbol+"多单！\n\n请再次确认是否执行？", "平仓多单",MB_YESNO)==IDYES
+                 && lxCloseByCondition(TO,lxCloseTicket,0,9)
+                 && lxArrayClose(lxCloseTicket,5000)
+                )  
+             {
+                lxMessage(MC[0].message,"【平仓"+SI.symbol+"持仓多单"+(string)(TS.buy_orders)+"张】");PlaySound("ok.wav");
+             }
+          }
+      }
+      if (sparam==MC[0].BS[1].name)  //平仓空单
+      {
+          if (TS.sell_orders==0)  {lxMessage(MC[0].message,"【"+SI.symbol+"无相应持仓单】");}
+          else  
+          {
+             if (   MessageBox("注意：即将平仓"+SI.symbol+"空单！\n\n请再次确认是否执行？","平仓空单",MB_YESNO)==IDYES
+                 && lxCloseByCondition(TO,lxCloseTicket,OP_SELL,9)
+                 && lxArrayClose(lxCloseTicket,5000)
+                )  
+             {
+                lxMessage(MC[0].message,"【平仓"+SI.symbol+"持仓多单"+(string)(TS.sell_orders)+"张】");PlaySound("ok.wav");
+             }
+          }
+      } 
+      //---  模板标准按钮结束
+      if (sparam==MC[0].BS[2].name)  //删除挂单
+      {
+          if (TS.buystop_orders+TS.sellstop_orders+TS.buylimit_orders+TS.selllimit_orders==0)  {lxMessage(MC[0].message,"【"+SI.symbol+"无相应持仓单】");}
+          else  
+          {
+             if (   MessageBox("注意：即将一键删除本程序管理的"+SI.symbol+"挂单！\n\n请再次确认是否执行？", "删除挂单",MB_YESNO)==IDYES
+                 && lxSelectOrders(TO,lxCloseTicket,11,npt_MagicNumber)
+                 && lxArrayClose(lxCloseTicket,5000)
+                )  
+             {
+                lxMessage(MC[0].message,"【删除挂单"+(string)(TS.buystop_orders+TS.sellstop_orders+TS.buylimit_orders+TS.selllimit_orders)+"张】");PlaySound("ok.wav");
+             }
+          }
+      }
+      if (sparam==MC[0].BS[3].name)  //一键清仓
+      {
+          if (OrdersTotal()==0)  {lxMessage(MC[0].message,"【"+SI.symbol+"无相应持仓单】");}
+          else  
+          {
+             int myTotal = OrdersTotal();
+             TradesOrders myTO[];
+             lxRefreshTO_laoxu(myTO,"*",-1);  
+             if (   MessageBox("注意：即将清仓本账户所有持仓单！\n\n请再次确认是否执行？","一键清仓",MB_YESNO)==IDYES
+                 && lxCloseByCondition(myTO,lxCloseTicket,9,9)
+                 && lxArrayClose(lxCloseTicket,5000)
+                )  
+             {
+                lxMessage(MC[0].message,"【清仓账户持仓单"+(string)myTotal+"张】");PlaySound("ok.wav");
+             }
+          }
+      } 
+      if (sparam==MC[0].BS[4].name)  //开仓多单
+      {
+          if (TS.buy_orders > 0 || TS.sell_orders > 0)  {lxMessage(MC[0].message,"【"+SI.symbol+"已经有持仓单】");}
+          else  
+          {
+             if (   MessageBox("注意：即将开仓"+SI.symbol+"多单！\n\n请再次确认是否执行？", "开仓多单",MB_YESNO)==IDYES
+                 && lxOrderCreat(OP_BUY,(double)MC[0].ES[0].edit,npt_Comment,npt_MagicNumber,SI,SI.ask)
+                )  
+             {
+                lxMessage(MC[0].message,"【开仓"+SI.symbol+"多单完毕】");PlaySound("ok.wav");
+             }
+          }
+      }
+      if (sparam==MC[0].BS[5].name)  //开仓空单
+      {
+          if (TS.sell_orders > 0 || TS.buy_orders > 0)  {lxMessage(MC[0].message,"【"+SI.symbol+"已经有持仓单】");}
+          else  
+          {
+             if (   MessageBox("注意：即将开仓"+SI.symbol+"空单！\n\n请再次确认是否执行？", "开仓空单",MB_YESNO)==IDYES
+                 && lxOrderCreat(OP_SELL,(double)MC[0].ES[0].edit,npt_Comment,npt_MagicNumber,SI,SI.bid)
+                )  
+             {
+                lxMessage(MC[0].message,"【开仓"+SI.symbol+"空单完毕】");PlaySound("ok.wav");
+             }
+          }
+      }
+      if (sparam == lxPrefix+"reset"   )  //复位最大浮亏和浮盈 
+      {
+         SS.accmaxprofit=0;SS.accmaxloss=0;TS.max_floating_loss=0;TS.max_floating_profit=0;
+         GlobalVariableSet(gv_main_maxloss_all,0);GlobalVariableSet(gv_main_maxprofit_all,0);
+         GlobalVariableSet(gv_main_maxloss_acc,0);GlobalVariableSet(gv_main_maxprofit_acc,0);
+         lxMenu_Top(SS.accmaxprofit,SS.accmaxloss,lxPrefix,clrRed,clrLime,clrRed);  //顶部信息开关      
+      }          
+      if (sparam == lxPrefix+"symbol" )  lxMenu_Right(TS,lxChartID,lxPrefix);//右侧持仓信息开关
+      if (sparam == lxPrefix+"topinfo")  lxMenu_Top(SS.accmaxprofit,SS.accmaxloss,lxPrefix,clrRed,clrLime,clrRed);//顶部信息开关      
+      if (ObjectFind(lxChartID,sparam) > -1 && sparam != lxPrefix+"symbol" && sparam != lxPrefix+"topinfo")  ObjectSetInteger(lxChartID,sparam,OBJPROP_STATE,false); 
+      for (i=0;i<ArraySize(MC);i++)  lxMenu_Message(lxChartID,MC[i],33);                 
+   }
+}
+//菜单x位置是否变动
+bool  lxMC_X_Last()
+{
+   bool myLast = true;
+   for (int i=0;i<ArraySize(MC);i++) 
+   {
+      if (MC[i].x_last != MC[i].x)  return(false);
+   }
+   return(true);
+} 
+color lxColor_pause(bool myBool) export
+{
+   color Color=clrRed;
+   if(myBool) Color=clrLime; else Color=clrRed;  //true为绿色，false为红色
+   return(Color);
+}
+//主菜单
+void lxMenu_Main()
+{
+   int h = 0,j = 25;
+   if (MC[0].now == true && MC[0].last != MC[0].now)
+   {
+      MC[0].last = MC[0].now;
+      lxObjectsDeleteByKeyword(lxChartID,MC[0].name);
+      int  x_1 = MC[0].x + lxScale(8),x_2 = 0,l = 39,a = 0,k = 37,g = 22; //菜单按钮的h（第几行）、j(行距)、k 宽 g 高 a第几个 
+      MC[0].height = lxScale(6 * j + 96);
+      int myset_y,myrun_y;  //"≡"位置，为了适应更多的分辨率而调整
+      if (TerminalInfoInteger(TERMINAL_SCREEN_DPI)/96.0 >= 1.25)  {myset_y = 17;myrun_y = 17;} else {myset_y = 21;myrun_y = 20;}
+      lxRectangleOut(true,lxChartID,MC[0].name,0,MC[0].x,MC[0].y + lxScale(13),MC[0].width,MC[0].height,npt_BGColor,BORDER_FLAT,0,clrDarkGray);      
+      if (!IsTesting()) 
+      {
+         lxLableOut(true,"－",MC[0].onoff,14,clrLightSlateGray,    0,0,0,MC[0].x+lxScale(8), MC[0].y+lxScale(21),     "Arial");        
+         lxLableOut(true,">", MC[0].pause,16,lxColor_pause(SS.run),0,0,0,MC[0].x+lxScale(33),MC[0].y+lxScale(myrun_y),"Arial"); 
+         lxLableOut(true,"×", MC[0].close,20,clrLightSlateGray,    0,0,0,MC[0].x+lxScale(52),MC[0].y+lxScale(14),     "Arial");
+      }
+      else  
+      {
+         lxButtonOut(true,lxChartID,MC[0].onoff,0,MC[0].x+lxScale(8), MC[0].y+lxScale(21),lxScale(20),lxScale(20),0,"－","Arial",14,clrWhite,clrGreen,clrWhite);
+         lxButtonOut(true,lxChartID,MC[0].pause,0,MC[0].x+lxScale(33),MC[0].y+lxScale(21),lxScale(20),lxScale(20),0,">", "Arial",16,clrWhite,lxColor_bool(SS.run),clrWhite);
+      }
+      //---  画间隔线部分  
+      string myLine="_____________________________"; 
+      if (TerminalInfoInteger(TERMINAL_SCREEN_DPI)/96.0 >= 1.25) myLine = "____________________________";   
+      //画线函数：线条文字，线条名称前缀，画线数量，按钮行距，按钮初始x位置，按钮初始y位置
+      lxLineDraw(myLine,MC[0].name,2,25,MC[0].x+lxScale(10),MC[0].y+lxScale(146));
+      //按钮宽度，一个为204，二个为102间距104，三个为67间距69，四个为50间距52
+      //画按钮：每行显示的按钮数量，按钮开始的按钮序号，按钮结束的按钮序号，按钮宽度，按钮间距,按钮高度，按钮行距，按钮初始x位置，按钮初始y位置
+      lxButtonDraw(MC[0],2,0,5,102,104,30,35,8,50); 
+      //画编辑框：每行显示的数量，开始的序号，结束的序号，宽度，间距，高度，行距，文字x1位置，x2位置，初始y位置
+      lxEditDraw(MC[0],3,0,2,34,70,20,25,8,40,162);
+   }
+   if (MC[0].now == true)
+   {      
+      string myTime = TimeToStr(TimeCurrent(),TIME_SECONDS) + "  星期" + lxTimeWeekToText(TimeDayOfWeek(TimeCurrent())); //主标题内容
+      color  myColor = clrWhite;
+      if (SS.run)  myColor = clrLime;  else  myColor = clrRed;
+      lxLableOut(true,myTime,MC[0].name+"time",10,myColor,0,0,0,MC[0].x + lxScale(110),MC[0].y + lxScale(22),"微软雅黑");           
+      h = 7;
+      //lxLableOut(true,"收盘："+DoubleToStr(iClose(NULL,npt_Move_Timeframe,1),Digits),MC[0].name+"closeprice",10,clrWhite,0,0,0,MC[0].x+lxScale(10),MC[0].y+lxScale(12+h*j),"微软雅黑");
+      lxMenu_Message(lxChartID,MC[0],33); 
+   } 
+}   
+//开仓条件   
+void  lxOrderRule()
+{
+    int    myTicket = -1,myPos = -1,myType = -1;
+    double myLots = 0,myPrice = 0;
+    if (   TS.buy_orders + TS.sell_orders > 0
+        && lxOrderLocationSearch(TO,SI.symbol,0,9,npt_MagicNumber,1) > -1
+       )
+    {
+        myTicket = lxOrderLocationSearch(TO,SI.symbol,0,9,npt_MagicNumber,1);
+        myPos    = lxOrderPos(TO,myTicket);
+        myType   = TO[myPos].type;
+        myLots   = TO[myPos].lots;
+        myPrice  = TO[myPos].openprice;
+    }
+    if (   myTicket > -1
+        && myType == OP_BUY
+        && TS.sellstop_orders == 0
+        && lxOrderCreat(OP_SELLSTOP,myLots+(double)MC[0].ES[1].edit,npt_Comment,npt_MagicNumber,SI,myPrice - (int)MC[0].ES[2].edit*SI.point)
+       )
+    {
+        lxMessage(MC[0].message,"【挂反向单SellStop完毕】");
+        SS.pendingtime = iTime(SI.symbol,npt_Move_Timeframe,0);
+    }
+    if (   myTicket > -1
+        && myType == OP_SELL
+        && TS.buystop_orders == 0
+        && lxOrderCreat(OP_BUYSTOP,myLots+(double)MC[0].ES[1].edit,npt_Comment,npt_MagicNumber,SI,myPrice + (int)MC[0].ES[2].edit*SI.point)
+       )
+    {
+        lxMessage(MC[0].message,"【挂反向单BuyStop完毕】");
+        SS.pendingtime = iTime(SI.symbol,npt_Move_Timeframe,0);
+    }
+    
+  
+}
+//平仓部分   
+void  lxOrderClose()
+{
+    for (int i=0;i<ArraySize(TO);i++)
+    {
+       if (   TO[i].type == OP_BUYSTOP
+           && OrderSelect(TO[i].ticket,SELECT_BY_TICKET,MODE_TRADES)
+           && OrderOpenPrice() - iClose(SI.symbol,npt_Move_Timeframe,1) > (int)MC[0].ES[2].edit*SI.point
+           && OrderModify(OrderTicket(),NormalizeDouble(iClose(SI.symbol,npt_Move_Timeframe,1) + (int)MC[0].ES[2].edit*SI.point,SI.digits),0,0,0,0)
+          )
+       {
+          lxMessage(MC[0].message,"【BuyStop单"+(string)TO[i].ticket+"移动一次】");
+       }
+       if (   TO[i].type == OP_SELLSTOP
+           && OrderSelect(TO[i].ticket,SELECT_BY_TICKET,MODE_TRADES)
+           && iClose(SI.symbol,npt_Move_Timeframe,1)-OrderOpenPrice() > (int)MC[0].ES[2].edit*SI.point
+           && OrderModify(OrderTicket(),NormalizeDouble(iClose(SI.symbol,npt_Move_Timeframe,1) - (int)MC[0].ES[2].edit*SI.point,SI.digits),0,0,0,0)
+          )
+       {
+          lxMessage(MC[0].message,"【SellStop单"+(string)TO[i].ticket+"移动一次】");
+       }
+    } 
+    if (   TS.buy_orders == 0 
+        && TS.sellstop_orders > 0
+        && lxCloseByCondition(TO,lxCloseTicket,OP_SELLSTOP,9)
+        && lxArrayClose(lxCloseTicket,5000)
+       )
+    {
+        lxMessage(MC[0].message,"【因无Buy单SellStop单清仓】");
+    }
+    if (   TS.sell_orders == 0 
+        && TS.buystop_orders > 0
+        && lxCloseByCondition(TO,lxCloseTicket,OP_BUYSTOP,9)
+        && lxArrayClose(lxCloseTicket,5000)
+       )
+    {
+        lxMessage(MC[0].message,"【因无Sell单BuyStop单清仓】");
+    }    
+}
+/*
+函    数:授权验证
+输出参数:0-合法，1-期限已过，2-帐号无效
+算    法:1、Demo帐号只有时间限制  2、Real帐号则有双重限制
+*/
+int lxVerify()
+{
+    if (!IsConnected() || IsTesting())  return(0);  //如果连接错误或模拟账户，直接返回
+    int myAuthorizeAccount=-999;     //初始账户的默认值
+    ArrayResize(myMT4Account,ArraySize(myMT4Account));
+    for (int i=0;i<ArraySize(myMT4Account);i++)
+    {
+       if (myMT4Account[i] == AccountNumber())  {myAuthorizeAccount = AccountNumber();break;}
+       if (myMT4Account[i] == 111111)           {myAuthorizeAccount = 111111;break;}
+       if (myMT4Account[i] == 999999)           {myAuthorizeAccount = 999999;break;}
+    }
+    if (   myAuthorizeAccount == AccountNumber()       //授权帐号
+        || (IsDemo() && myAuthorizeAccount == 999999)  //允许任意模拟账号
+        || myAuthorizeAccount == 111111                //允许所有帐号
+       )
+    {
+       if (TimeCurrent() > StrToTime(AuthorizeTime))  //如果当下服务器时间大于授权时间，也就过了使用期限
+       {
+          //如果有效期没有提醒过，提醒一次
+          lxSendInfo("[" + lxPrefix + "] 有效期限已过！",true); 
+          return(1);
+       }
+       //如果验证通过，删除掉以前的提醒
+       if (ObjectFind(lxChartID,lxPrefix+"VerifyInfo") > -1)  ObjectDelete(lxChartID,lxPrefix + "VerifyInfo");   
+    }
+    else
+    {
+       lxSendInfo("[" + lxPrefix + "] 账户未经授权！",true);  //授权没有通过，提醒
+       return(2);
+    }
+    if (StrToTime(AuthorizeTime) - TimeLocal() < 86400*10) //提前10天提示
+    {
+       lxLableOut(true,lxPrefix+"有效期限将至" + (string)AuthorizeTime + "！",lxPrefix + "VerifyInfo",10,clrRed,0,0,CORNER_RIGHT_UPPER,140,3,"微软雅黑",0,ANCHOR_RIGHT_UPPER,true,false,true,0);
+    }
+    return(0);
+}
+//+------------------------------------------------------------------+
+//|                   合并单文件用其它函数表                         |
+//+------------------------------------------------------------------+  
+//===========================  模板自用函数表  ==================================    
+/*
+函    数:删除关键字对象
+输出参数:
+算    法:
+*/
+void lxObjectsDeleteByKeyword(const  long   chart_ID=0, //主图ID
+                                     string keyword=""
+                             )
+{
+    for (int i=ObjectsTotal(chart_ID)-1;i>=0;i--)
+    {
+        if (StringFind(ObjectName(i),keyword,0)>-1)
+        {
+            ObjectDelete(chart_ID,ObjectName(i));
+        }
+    }
+    return;
+}  
+/*
+函    数:按当前显示器的dpi修正显示的尺寸
+输出参数:修正后的点值
+算    法:
+*/    
+int lxScale(int myScals) export
+{
+    double myScale_Factor=TerminalInfoInteger(TERMINAL_SCREEN_DPI)/96.0; 
+    return((int)(myScals*myScale_Factor));
+}
+/*
+函    数：按钮颜色
+输入参数：bool和菜单结构体
+输出参数：颜色
+算    法：
+*/
+color lxBSColor(ButtonStatus &myBS) export
+{
+   if(myBS.status)  return(myBS.colortrue);  else  return(myBS.colorfalse);
+   return(clrRed);
+}
+/*
+函    数：按钮文字
+输入参数：bool和菜单结构体
+输出参数：颜色
+算    法：
+*/
+string lxBSText(ButtonStatus &myBS) export
+{
+   if(myBS.status)  return(myBS.nametrue);  else  return(myBS.namefalse);
+   return("");
+}
+/*
+函    数:输出按钮到图表
+输出参数:true-输出成功
+算    法:
+*/
+bool    lxButtonOut(const   bool              isout=true,               //允许输出
+                    const   long              chart_ID=0,               //主图ID
+                    const   string            name="Button",            //对象名称
+                    const   int               sub_window=0,             //副图编号
+                    const   int               x=0,                      //x坐标
+                    const   int               y=0,                      //y坐标
+                    const   int               width=50,                 //按钮宽度
+                    const   int               height=18,                //按钮高度
+                    const   ENUM_BASE_CORNER  corner=CORNER_LEFT_UPPER, //锚点位置
+                    const   string            text="Button",            //按钮文字
+                    const   string            font="Arial",             //文字字体
+                    const   int               font_size=10,             //文字尺寸
+                    const   color             clr=clrBlack,             //文字颜色
+                    const   color             back_clr=clrGray,         //背景色
+                    const   color             border_clr=clrNONE,       //边框色
+                    const   bool              state=false,              //按下状态
+                    const   bool              back=false,               //设置为背景
+                    const   bool              selection=false,          //高亮移动
+                    const   bool              hidden=true,              //列表中隐藏对象名
+                    const   long              z_order=0                 // priority for mouse click
+                   )
+{
+    if (!isout) return(true);
+    //更改对象属性
+    if (ObjectFind(chart_ID,name)==-1)
+    {
+        //创建输出对象
+        ObjectCreate(chart_ID,name,OBJ_BUTTON,sub_window,0,0);
+    }
+    ObjectSetInteger(chart_ID,name,OBJPROP_XDISTANCE,x);
+    ObjectSetInteger(chart_ID,name,OBJPROP_YDISTANCE,y);
+    ObjectSetInteger(chart_ID,name,OBJPROP_XSIZE,width);
+    ObjectSetInteger(chart_ID,name,OBJPROP_YSIZE,height);
+    ObjectSetInteger(chart_ID,name,OBJPROP_CORNER,corner);
+    ObjectSetString(chart_ID,name,OBJPROP_TEXT,text);
+    ObjectSetString(chart_ID,name,OBJPROP_FONT,font);
+    ObjectSetInteger(chart_ID,name,OBJPROP_FONTSIZE,font_size);
+    ObjectSetInteger(chart_ID,name,OBJPROP_COLOR,clr);
+    ObjectSetInteger(chart_ID,name,OBJPROP_BGCOLOR,back_clr);
+    ObjectSetInteger(chart_ID,name,OBJPROP_BORDER_COLOR,border_clr);
+    ObjectSetInteger(chart_ID,name,OBJPROP_BACK,back);
+    ObjectSetInteger(chart_ID,name,OBJPROP_STATE,state);
+    ObjectSetInteger(chart_ID,name,OBJPROP_SELECTABLE,selection);
+    ObjectSetInteger(chart_ID,name,OBJPROP_SELECTED,selection);
+    ObjectSetInteger(chart_ID,name,OBJPROP_HIDDEN,hidden);
+    ObjectSetInteger(chart_ID,name,OBJPROP_ZORDER,z_order);
+    return(true);
+}
+/*
+函    数:将星期几转换为汉字
+输出参数:
+算    法:
+*/
+string lxTimeWeekToText(int myWeek)
+{
+   string myText="";
+   switch(myWeek)
+   {
+      case 1   :myText="一";break;
+      case 2   :myText="二";break;
+      case 3   :myText="三";break;
+      case 4   :myText="四";break;
+      case 5   :myText="五";break;
+      case 6   :myText="六";break;
+      case 0   :myText="日";break;
+   }
+   return(myText);
+}
+/*
+函    数:输出标签到图表
+输出参数:true-输出成功
+算    法:
+*/
+bool    lxLableOut(const    bool                isout=true,               //允许输出
+                   const    string              text="Label",             //输出内容
+                   const    string              name="Label",             //对象名称
+                   const    int                 font_size=10,             //字体尺寸
+                   const    color               clr=clrRed,               //字体颜色
+                   const    long                chart_ID=0,               //主图ID
+                   const    int                 sub_window=0,             //副图编号
+                   const    ENUM_BASE_CORNER    corner=CORNER_LEFT_UPPER, //锚点
+                   const    int                 x=0,                      //x坐标
+                   const    int                 y=0,                      //y坐标
+                   const    string              font="Arial",             //字体类型
+                   const    double              angle=0.0,                //字体角度
+                   const    ENUM_ANCHOR_POINT   anchor=ANCHOR_LEFT_UPPER, //原始坐标
+                   const    bool                back=false,               //设置为背景
+                   const    bool                selection=false,          //高亮移动
+                   const    bool                hidden=true,              //列表中隐藏对象名
+                   const    long                z_order=0                 //priority for mouse click
+                  )
+{
+    if (!isout) return(true);
+    if (ObjectFind(chart_ID,name)==-1)
+    {
+        //创建输出对象
+        ObjectCreate(chart_ID,name,OBJ_LABEL,sub_window,0,0);       
+    }
+    ObjectSetInteger(chart_ID,name,OBJPROP_XDISTANCE,x);
+    ObjectSetInteger(chart_ID,name,OBJPROP_YDISTANCE,y);
+    ObjectSetInteger(chart_ID,name,OBJPROP_CORNER,corner);
+    ObjectSetString(chart_ID,name,OBJPROP_TEXT,text);
+    ObjectSetString(chart_ID,name,OBJPROP_FONT,font);
+    ObjectSetInteger(chart_ID,name,OBJPROP_FONTSIZE,font_size);
+    ObjectSetDouble(chart_ID,name,OBJPROP_ANGLE,angle);
+    ObjectSetInteger(chart_ID,name,OBJPROP_ANCHOR,anchor);
+    ObjectSetInteger(chart_ID,name,OBJPROP_COLOR,clr);
+    ObjectSetInteger(chart_ID,name,OBJPROP_BACK,back);
+    ObjectSetInteger(chart_ID,name,OBJPROP_SELECTABLE,selection);
+    ObjectSetInteger(chart_ID,name,OBJPROP_SELECTED,selection);
+    ObjectSetInteger(chart_ID,name,OBJPROP_HIDDEN,hidden);
+    ObjectSetInteger(chart_ID,name,OBJPROP_ZORDER,z_order);
+    ObjectSetString(chart_ID,name,OBJPROP_TOOLTIP,"\n");    //额外增加，鼠标放上不显示物件对象名称
+    return(true);
+}
+/*
+函    数:鼠标放到菜单上面的文字变色
+输出参数:
+算    法:
+*/     
+void lxButton_TextColor(long   myChartID,
+                        long   mylparam,
+                        double mydparam,
+                        string myName,
+                        color  myOldColor,
+                        color  myNewColor,
+                        //int    myOldSize,   //字体旧大小
+                        //int    myNewSize,
+                       ) export
+{
+   if (ObjectFind(0,myName)==-1) return;
+   int x=(int)ObjectGetInteger(0,myName,OBJPROP_XDISTANCE,0);
+   int y=(int)ObjectGetInteger(0,myName,OBJPROP_YDISTANCE,0);
+   int k=(int)ObjectGetInteger(0,myName,OBJPROP_XSIZE,0);
+   int g=(int)ObjectGetInteger(0,myName,OBJPROP_YSIZE,0);
+   if (mylparam>x && mylparam<x+k && mydparam>y && mydparam<y+g)
+   {
+      ObjectSetInteger(myChartID,myName,OBJPROP_COLOR,myNewColor);
+      //ObjectSetInteger(myChartID,myName,OBJPROP_FONTSIZE,myNewSize);
+   }
+   if (mylparam<x || mylparam>x+k || mydparam<y || mydparam>y+g) 
+   {
+     ObjectSetInteger(myChartID,myName,OBJPROP_COLOR,myOldColor);
+     //ObjectSetInteger(myChartID,myName,OBJPROP_FONTSIZE,myOldSize);
+   } 
+} 
+/*
+函    数:鼠标放到菜单上面颜色变化
+输出参数:
+算    法:
+*/     
+void lxButton_BackColor(long   myChartID,
+                        long   mylparam,
+                        double mydparam,
+                        string myButtonName,
+                        color  myOldColor,
+                        color  myNewColor,
+                        int    myOldsize,   //字体旧大小
+                        int    myNewsize,   //字体新大小
+                       ) export
+{
+   if (ObjectFind(0,myButtonName)==-1) return;
+   int x=(int)ObjectGetInteger(myChartID,myButtonName,OBJPROP_XDISTANCE,0);
+   int y=(int)ObjectGetInteger(myChartID,myButtonName,OBJPROP_YDISTANCE,0);
+   int k=(int)ObjectGetInteger(myChartID,myButtonName,OBJPROP_XSIZE,0);
+   int g=(int)ObjectGetInteger(myChartID,myButtonName,OBJPROP_YSIZE,0);
+   int w=(int)ObjectGetInteger(myChartID,myButtonName,OBJPROP_CORNER,0);
+   int z=(int)ChartGetInteger(myChartID,CHART_WIDTH_IN_PIXELS,0);   
+   if (   (w==0 && mylparam>x && mylparam<x+k && mydparam>y && mydparam<y+g) 
+       || (w==1 && mylparam>z-x && mylparam<z-x+k && mydparam>y && mydparam<y+g)
+      )
+   {   
+      ObjectSetInteger(myChartID,myButtonName,OBJPROP_BGCOLOR,myNewColor);
+      ObjectSetInteger(myChartID,myButtonName,OBJPROP_FONTSIZE,myNewsize);
+   }
+   if (   (w==0 && (mylparam<x || mylparam>x+k || mydparam<y || mydparam>y+g))
+       || (w==1 && (mylparam<z-x || mylparam>z-x+k || mydparam<y || mydparam>y+g))
+      ) 
+   {
+      ObjectSetInteger(myChartID,myButtonName,OBJPROP_BGCOLOR,myOldColor);
+      ObjectSetInteger(myChartID,myButtonName,OBJPROP_FONTSIZE,myOldsize);
+   } 
+}  
+//为指定对象显示和删除提示信息
+void lxPromptMessage_Width(long   mylparam,
+                           double mydparam,
+                           string myButtonName,
+                           string myPrompt,
+                           int    myk,
+                          ) export
+{
+   if (ObjectFind(0,myButtonName)==-1) return;
+   int x=(int)ObjectGetInteger(0,myButtonName,OBJPROP_XDISTANCE,0);
+   int y=(int)ObjectGetInteger(0,myButtonName,OBJPROP_YDISTANCE,0);
+   int k=(int)ObjectGetInteger(0,myButtonName,OBJPROP_XSIZE,0);
+   //int g=(int)ObjectGetInteger(0,myButtonName,OBJPROP_YSIZE,0);
+   int myWidth =(int)ChartGetInteger(0,CHART_WIDTH_IN_PIXELS ,0);  //屏幕宽
+   if (mylparam<myWidth-x+k && mylparam>myWidth-x-k && mydparam>y && mydparam<y+lxScale(10))
+   {
+       lxEditOut(true,0,myButtonName+"prompt",0,(int)(x+lxScale(myk)),(int)(mydparam+lxScale(20)),lxScale(myk),lxScale(22),myPrompt,"微软雅黑",9,ALIGN_CENTER,1,CORNER_RIGHT_UPPER,clrWhite,clrCadetBlue,clrWhite);
+   }
+   if (mylparam<myWidth-x-k || mylparam>myWidth-x+k || mydparam<y || mydparam>y+lxScale(10))
+   {  if (ObjectFind(0,myButtonName+"prompt")>-1)  ObjectDelete(0,myButtonName+"prompt");}
+}  
+void lxPromptMessage_LP(long   mylparam,
+                        double mydparam,
+                        string myName,
+                        string myPrompt,
+                        int    myk,
+                       ) export
+{
+   if (ObjectFind(0,myName)==-1) return;
+   int x=(int)ObjectGetInteger(0,myName,OBJPROP_XDISTANCE,0);
+   int y=(int)ObjectGetInteger(0,myName,OBJPROP_YDISTANCE,0);
+   int k=(int)ObjectGetInteger(0,myName,OBJPROP_XSIZE,0);
+   //int g=(int)ObjectGetInteger(0,myName,OBJPROP_YSIZE,0);
+   int myWidth =(int)ChartGetInteger(0,CHART_WIDTH_IN_PIXELS ,0);  //屏幕宽
+   if (mylparam<myWidth-x+k && mylparam>myWidth-x-k && mydparam>y && mydparam<y+lxScale(10))
+   {
+       lxEditOut(true,0,myName+"prompt",0,(int)(x+lxScale(myk)),(int)(mydparam+lxScale(20)),lxScale(myk),lxScale(22),myPrompt,"微软雅黑",9,ALIGN_CENTER,1,CORNER_RIGHT_UPPER,clrWhite,clrCadetBlue,clrWhite);
+   }
+   if (mylparam<myWidth-x-k || mylparam>myWidth-x+k || mydparam<y || mydparam>y+lxScale(10))
+   {  if (ObjectFind(0,myName+"prompt")>-1)  ObjectDelete(0,myName+"prompt");}
+}   
+/*
+函    数:鼠标放到菜单上面的关闭按钮变化
+输出参数:
+算    法:
+*/     
+void lxButton_CloseColor(long   myChartID,
+                        long   mylparam,
+                        double mydparam,
+                        string myName,
+                        int    oldsize,   //字体旧大小
+                       ) export
+{
+   if (ObjectFind(0,myName)==-1) return;
+   int x=(int)ObjectGetInteger(0,myName,OBJPROP_XDISTANCE,0);
+   int y=(int)ObjectGetInteger(0,myName,OBJPROP_YDISTANCE,0);
+   int k=(int)ObjectGetInteger(0,myName,OBJPROP_XSIZE,0);
+   int g=(int)ObjectGetInteger(0,myName,OBJPROP_YSIZE,0);
+   if (mylparam>x && mylparam<x+k && mydparam>y && mydparam<y+g)
+   {
+      int my_x=1;
+      if(TerminalInfoInteger(TERMINAL_SCREEN_DPI)/96.0>=1.25) my_x=2;
+      lxButtonOut(true,myChartID,myName+"bt",0,x-lxScale(my_x),y+lxScale(6),lxScale(20),lxScale(20),CORNER_LEFT_UPPER,"×","Arial",oldsize,clrWhite,clrRed,clrRed);
+   }
+   if (mylparam<x || mylparam>x+k || mydparam<y || mydparam>y+g) 
+   {
+      if (ObjectFind(0,myName+"bt")>-1)  ObjectDelete(myChartID,myName+"bt");
+   } 
+}   
+/*
+函    数:鼠标放到菜单上面文字变化
+输出参数:
+算    法:
+*/   
+void lxButton_TextSize(long   myChartID,
+                       long   mylparam,
+                       double mydparam,
+                       string myButtonName,
+                       color  myOldSize,
+                       color  myNewSize,
+                      ) export
+{
+   if (ObjectFind(0,myButtonName)==-1) return;
+   int x=(int)ObjectGetInteger(myChartID,myButtonName,OBJPROP_XDISTANCE,0);
+   int y=(int)ObjectGetInteger(myChartID,myButtonName,OBJPROP_YDISTANCE,0);
+   int k=(int)ObjectGetInteger(myChartID,myButtonName,OBJPROP_XSIZE,0);
+   int g=(int)ObjectGetInteger(myChartID,myButtonName,OBJPROP_YSIZE,0);
+   int w=(int)ObjectGetInteger(myChartID,myButtonName,OBJPROP_CORNER,0);
+   int z=(int)ChartGetInteger(myChartID,CHART_WIDTH_IN_PIXELS,0);   
+   if (   (w==0 && mylparam>x && mylparam<x+k && mydparam>y && mydparam<y+g) 
+       || (w==1 && mylparam>z-x && mylparam<z-x+k && mydparam>y && mydparam<y+g)
+      )
+   {
+      ObjectSetInteger(myChartID,myButtonName,OBJPROP_FONTSIZE,myNewSize);
+   }
+   if (   (w==0 && (mylparam<x || mylparam>x+k || mydparam<y || mydparam>y+g))
+       || (w==1 && (mylparam<z-x || mylparam>z-x+k || mydparam<y || mydparam>y+g))
+      ) 
+   {
+      ObjectSetInteger(myChartID,myButtonName,OBJPROP_FONTSIZE,myOldSize);
+   } 
+}
+/*
+函    数：按钮true和false切换，不打印值
+输入参数：
+输出参数：
+算    法:
+*/
+void  lxTrueFalseExchange(bool  &myValue) export   //需要交换的值
+{
+   if (myValue==true)  myValue=false;  else  myValue=true;
+}
+//交易信息显示变量赋值
+void lxMessage(string &myMessage[],  //消息数组赋值
+               string  myText        //显示内容
+              )
+{
+   myMessage[1]=myMessage[0];
+   myMessage[0]=myText;
+   Print(myText);
+   return;
+}
+/*
+函    数：按钮true和false切换，同时打印状态
+输入参数：
+输出参数：
+算    法:
+*/
+void  lxButtonChange(ButtonStatus  &myBS,          //按钮结构体 
+                     string        &myMessage[],   //按钮提示信息
+                    ) export
+{
+   if (ObjectFind(0,myBS.name)==-1) return;
+   if(myBS.status==true)
+   {
+      myBS.status=false;
+      ObjectSetString(0,myBS.name,OBJPROP_TEXT,myBS.namefalse);
+      ObjectSetInteger(0,myBS.name,OBJPROP_BGCOLOR,myBS.colorfalse);
+      ObjectSetInteger(0,myBS.name,OBJPROP_STATE,false);
+      lxMessage(myMessage,myBS.textfalse);
+   }
+   else
+   {
+      myBS.status=true;
+      ObjectSetString(0,myBS.name,OBJPROP_TEXT,myBS.nametrue);
+      ObjectSetInteger(0,myBS.name,OBJPROP_BGCOLOR,myBS.colortrue);
+      ObjectSetInteger(0,myBS.name,OBJPROP_STATE,false);
+      lxMessage(myMessage,myBS.texttrue);
+   }
+}  
+/*
+函    数：货币及交易信息在右上角显示函数
+输出参数：右上角显示交易信息，可以打开和关闭
+算法说明：
+*/  
+void lxMenu_Symbol(TradesStatistical &myEA,   //本EA的TS
+                   TradesStatistical &myAcc,  //本EA的TS
+                   long               myChartId,
+                   string             myPrvfix,
+                   int                myFontSize,
+                   bool               myColor,    //时间显示的颜色
+                  ) export
+{
+   if (ObjectFind(myChartId,myPrvfix+"symbol")==-1)  //如果检测不到按钮的话，重写按钮
+   {
+      lxButtonOut(true,myChartId,myPrvfix+"symbol",0,lxScale(20),lxScale(20),lxScale(18),lxScale(18),CORNER_RIGHT_UPPER,"<","Arial",12,clrWhite,clrRed,clrWhite);
+   } 
+   if(ObjectGetInteger(0,myPrvfix+"symbol",OBJPROP_STATE,true)==true)
+   {
+      ObjectSetInteger(0,myPrvfix+"symbol",OBJPROP_BGCOLOR,clrGreen);
+      ObjectSetString(0,myPrvfix+"symbol",OBJPROP_TEXT,">");
+      int    xsy=100+StringLen(Symbol())*13/2;  //货币名称显示的X值
+      int    x1=lxScale(120),x2=lxScale(32);
+      int    y=lxScale(60),h=0,l=lxScale(15);
+      lxLableOut(true,Symbol(),myPrvfix+"Right_Symbol",14,clrDodgerBlue,0,0,1,lxScale(xsy),lxScale(16),"Arial Bold");
+      color myTimeColor;
+      if(myColor==true) myTimeColor=clrWhite; else myTimeColor=clrRed;
+      lxLableOut(true,TimeToStr(TimeCurrent(),TIME_DATE|TIME_MINUTES|TIME_SECONDS),myPrvfix+"Right_Time",myFontSize,myTimeColor,0,0,1,lxScale(156),lxScale(40));
+      lxLableOut(true,"空单组",myPrvfix+"Right_SellGroup",myFontSize,clrRed  ,0,0,1,x1,y-lxScale(4)  ,"微软雅黑",0,ANCHOR_RIGHT_UPPER);h++;
+      lxLableOut(true,(string)myEA.sell_orders+"  "+(string)myEA.selllimit_orders+"  "+(string)myEA.sellstop_orders,myPrvfix+"Right_SellAmount",myFontSize,lxColor_number(myEA.sell_grp_profit),0,0,1,x1,y+h*l,"Arial",0,ANCHOR_RIGHT_UPPER);h++;
+      lxLableOut(true,DoubleToStr(myEA.sell_grp_lots   ,2 ),myPrvfix+"Right_SellLots"  ,myFontSize,lxColor_number(myEA.sell_grp_profit),0,0,1,x1,y+h*l,"Arial",0,ANCHOR_RIGHT_UPPER);h++;
+      lxLableOut(true,DoubleToStr(myEA.sell_grp_profit ,2 ),myPrvfix+"Right_SellProfit",myFontSize,lxColor_number(myEA.sell_grp_profit),0,0,1,x1,y+h*l,"Arial",0,ANCHOR_RIGHT_UPPER);h++;
+      lxLableOut(true,DoubleToStr(myEA.sell_grp_avg,Digits),myPrvfix+"Right_SellAvg"   ,myFontSize,lxColor_number(myEA.sell_grp_profit),0,0,1,x1,y+h*l,"Arial",0,ANCHOR_RIGHT_UPPER);h++;
+      lxLableOut(true,"最大浮亏",myPrvfix+"Right_MaxLoss"   ,myFontSize,clrRed,0,0,1,x1,y+6+h*l,"微软雅黑",0,ANCHOR_RIGHT_UPPER);h++;
+      lxLableOut(true,DoubleToStr(myEA.max_floating_loss,2),myPrvfix+"Right_MaxLoss_EA",myFontSize,clrRed,0,0,1,x1,y+10+h*l,"Arial",0,ANCHOR_RIGHT_UPPER);h++;
+      lxLableOut(true,DoubleToStr(myAcc.max_floating_loss,2),myPrvfix+"Right_MaxLoss_Acc",myFontSize,clrRed,0,0,1,x1,y+10+h*l,"Arial",0,ANCHOR_RIGHT_UPPER);h++;
+      
+      y=lxScale(60);h=0;l=lxScale(15);
+      lxLableOut(true,"多单组",myPrvfix+"Right_BuyGroup",myFontSize,clrLime ,0,0,1,x2,y-lxScale(4)  ,"微软雅黑",0,ANCHOR_RIGHT_UPPER,false,false,true);h++;
+      lxLableOut(true,(string)myEA.buy_orders+"  "+(string)myEA.buylimit_orders+"  "+(string)myEA.buystop_orders,myPrvfix+"Right_BuyAmount",myFontSize,lxColor_number(myEA.buy_grp_profit),0,0,1,x2,y+h*l,"Arial",0,ANCHOR_RIGHT_UPPER);h++;
+      lxLableOut(true,DoubleToStr(myEA.buy_grp_lots  ,2   ),myPrvfix+"Right_BuyLots"  ,myFontSize,lxColor_number(myEA.buy_grp_profit),0,0,1,x2,y+h*l,"Arial",0,ANCHOR_RIGHT_UPPER);h++;
+      lxLableOut(true,DoubleToStr(myEA.buy_grp_profit,2   ),myPrvfix+"Right_BuyProfit",myFontSize,lxColor_number(myEA.buy_grp_profit),0,0,1,x2,y+h*l,"Arial",0,ANCHOR_RIGHT_UPPER);h++;
+      lxLableOut(true,DoubleToStr(myEA.buy_grp_avg,Digits ),myPrvfix+"Right_BuyAvg"   ,myFontSize,lxColor_number(myEA.buy_grp_profit),0,0,1,x2,y+h*l,"Arial",0,ANCHOR_RIGHT_UPPER);h++;
+      lxLableOut(true,"最大浮盈",myPrvfix+"Right_MaxProfit"   ,myFontSize,clrLime,0,0,1,x2,y+6+h*l,"微软雅黑",0,ANCHOR_RIGHT_UPPER);h++;
+      lxLableOut(true,DoubleToStr(myEA.max_floating_profit,2),myPrvfix+"Right_MaxProfit_EA",myFontSize,clrLime,0,0,1,x2,y+10+h*l,"Arial",0,ANCHOR_RIGHT_UPPER);h++;
+      lxLableOut(true,DoubleToStr(myAcc.max_floating_profit,2),myPrvfix+"Right_MaxProfit_Acc",myFontSize,clrLime,0,0,1,x2,y+10+h*l,"Arial",0,ANCHOR_RIGHT_UPPER);h++;
+    }
+   if (ObjectGetInteger(0,myPrvfix+"symbol",OBJPROP_STATE,true)==false)
+   {
+      ObjectSetInteger(0,myPrvfix+"symbol",OBJPROP_BGCOLOR,clrRed);
+      ObjectSetString(0,myPrvfix+"symbol",OBJPROP_TEXT,"<");
+      if (ObjectFind(0,myPrvfix+"Right_Symbol")>-1)
+      {  lxObjectsDeleteByKeyword(0,myPrvfix+"Right_");}
+   }    
+}    
+/*
+函    数:条件平仓
+输出参数:false-平仓失败,true-平仓成功
+算    法:
+*/
+bool lxCloseByCondition(TradesOrders &myTO[], //持仓单源数组
+                        int &myCloseTicket[], //平仓单目标数组
+                        int myType, //平仓单类型 0-Buy,1-Sell,2-BuyLimit,3-SellLimit,4-BuyStop,5-SellStop,9-所有
+                        int myMode  //平仓模式 0=浮赢,1=浮亏,9=任意
+                       )  export
+{
+    int i=0,j=0;  //循环计数器变量
+    ArrayInitialize(myCloseTicket,-1);
+    for (i=0;i<ArraySize(myTO);i++)
+    {
+        if (   myTO[i].ticket>0 //有效持仓单
+            //平仓单类型
+            && (   myTO[i].type==myType //指定类型
+                || myType==9 //所有类型
+               )
+            //平仓模式
+            && (   (myMode==0 && myTO[i].profit>0) //浮赢
+                || (myMode==1 && myTO[i].profit<0) //浮亏
+                || myMode==9 //任意
+               )
+           )
+        {
+            myCloseTicket[j]=myTO[i].ticket;
+            j++;
+        }
+    }
+    if (myCloseTicket[0]>0) return(true);
+    return(false);
+}
+/*
+函    数:数组平仓
+输出参数:false-平仓失败,true-平仓成功
+算    法:
+*/
+bool lxArrayClose(int    &myCloseArray[],   //平仓数组
+                  const int myTradingDelay=5000 //延时
+                 ) export
+{
+    int cnt=0,i=0;  //循环计数器变量
+    for (cnt=0;cnt<ArraySize(myCloseArray);cnt++)
+    {
+        if (myCloseArray[cnt]>0 && OrderSelect(myCloseArray[cnt],SELECT_BY_TICKET,MODE_TRADES))
+        {
+            lxTradeDelay(myTradingDelay);
+            //买入成交持仓单市价平仓
+            if (OrderType()==OP_BUY && OrderClose(OrderTicket(),OrderLots(),MarketInfo(OrderSymbol(),MODE_BID),0))
+            {
+                myCloseArray[cnt]=-1;
+                i++; //未平仓单计数
+            }
+            //卖出成交持仓单市价平仓
+            if (OrderType()==OP_SELL && OrderClose(OrderTicket(),OrderLots(),MarketInfo(OrderSymbol(),MODE_ASK),0))
+            {
+                myCloseArray[cnt]=-1;
+                i++; //未平仓单计数
+            }
+            //撤销挂单
+            if (   (OrderType()==OP_BUYLIMIT || OrderType()==OP_BUYSTOP || OrderType()==OP_SELLLIMIT || OrderType()==OP_SELLSTOP)
+                && OrderDelete(OrderTicket())
+               )
+            {
+                myCloseArray[cnt]=-1;
+                i++; //未平仓单计数
+            }
+        }
+    }
+    
+    if (i==0) 
+    {
+        ArrayInitialize(myCloseArray,-1); //初始化平仓数组
+        return(false);
+    }
+    return(true);
+}
+/*
+函    数：刷新持仓单数组
+输出参数：持仓单数量 
+算法说明：
+*/
+int lxRefreshTO_laoxu(TradesOrders    &myTO[],    //持仓单数组
+                      string          mySymbol,   //指定商品，"*"表示所有持仓单
+                      int             myMagicNum  //程序识别码, -1表示所有持仓单
+                     )  export
+{
+    int i=0,j=0,k=0; //循环计数器变量
+    int HistoryTotal=OrdersHistoryTotal();
+    //重新界定订单数组
+    int myOrdersTotal=OrdersTotal();
+    ArrayResize(myTO,myOrdersTotal); 
+    //刷新原始数组
+    for (i=0;i<myOrdersTotal;i++)
+    {
+        if (   OrderSelect(i,SELECT_BY_POS,MODE_TRADES) //选中持仓单
+            && (   mySymbol==OrderSymbol() //指定商品
+                || mySymbol=="*" //所有商品
+               )
+            && (   myMagicNum==OrderMagicNumber() //指定程序订单
+                || myMagicNum==-1 //所有订单
+               )
+           )
+        {
+            myTO[j].ticket=NULL;
+            myTO[j].opentime=NULL;
+            myTO[j].type=NULL;
+            myTO[j].lots=NULL;
+            myTO[j].symbol=NULL;
+            myTO[j].openprice=NULL;
+            myTO[j].stoploss=NULL;
+            myTO[j].takeprofit=NULL;
+            myTO[j].commission=NULL;
+            myTO[j].swap=NULL;
+            myTO[j].profit=NULL;
+            myTO[j].comment=NULL;
+            myTO[j].magicnumber=NULL;
+            myTO[j].cost=NULL;
+            
+            myTO[j].ticket=OrderTicket();                                       //订单号
+            myTO[j].opentime=OrderOpenTime();                                   //开仓时间
+            myTO[j].type=OrderType();                                           //订单类型
+            myTO[j].lots=OrderLots();                                           //开仓量
+            myTO[j].symbol=OrderSymbol();                                       //商品名称
+            myTO[j].openprice=NormalizeDouble(OrderOpenPrice(),(int)SymbolInfoInteger(OrderSymbol(),SYMBOL_DIGITS));         //建仓价
+            myTO[j].stoploss=NormalizeDouble(OrderStopLoss(),(int)SymbolInfoInteger(OrderSymbol(),SYMBOL_DIGITS));           //止损价
+            myTO[j].takeprofit=NormalizeDouble(OrderTakeProfit(),(int)SymbolInfoInteger(OrderSymbol(),SYMBOL_DIGITS));       //止盈价
+            myTO[j].commission=OrderCommission();                               //佣金
+            myTO[j].swap=OrderSwap();                                           //利息
+            myTO[j].profit=OrderProfit();                                       //利润
+            myTO[j].comment=OrderComment();                                     //注释
+            myTO[j].magicnumber=OrderMagicNumber();                             //程序识别码
+            myTO[j].cost=OrderCommission()+OrderSwap();                         //成本
+            j++;
+        }
+    }
+    if (j>0) 
+    {
+        ArrayResize(myTO,j); //重新界定数组边界
+    }
+    else //没有持仓单，所有项目NULL
+    {
+        ArrayResize(myTO,1);
+        myTO[j].ticket=NULL;
+        myTO[j].symbol=NULL;
+        myTO[j].type=NULL;
+        myTO[j].lots=NULL;
+        myTO[j].opentime=NULL;
+        myTO[j].openprice=NULL;
+        myTO[j].stoploss=NULL;
+        myTO[j].takeprofit=NULL;
+        myTO[j].profit=NULL;
+        myTO[j].commission=NULL;
+        myTO[j].swap=NULL;
+        myTO[j].comment=NULL;
+        myTO[j].magicnumber=NULL;
+        myTO[j].cost=NULL;
+    }
+    return(j);
+}
+/*
+函    数:建仓、加仓
+输出参数:true-建仓成功，false-建仓失败
+算    法:建仓、加仓
+BuyLimit挂单价<=Ask-StopLevel      BuyStop挂单价>=Ask+StopLevel 
+SellLimit挂单价>=Bid+StopLevel	    SellStop挂单价<=Bid-StopLevel
+*/
+bool lxOrderCreat(int           myType,         //建仓类型
+                  double        myLots,         //建仓量
+                  string        myComment,      //订单注释
+                  int           myMagicNum,     //程序控制码
+                  SymbolInfo    &mySI,          //商品信息
+                  double        myPrice         //建仓价
+                 )  export
+{
+//建仓量不合规 不执行
+    if (myLots<=0) return(false);
+//正常建仓
+    myLots=lxLotsFormat(mySI.symbol,myLots);
+    if (   myType==OP_BUY
+        && OrderSend(mySI.symbol,OP_BUY,myLots,mySI.ask,0,0,0,myComment,myMagicNum,0,clrBlue)>0
+       )
+    {
+        return(true);
+    }
+    if (   myType==OP_BUYLIMIT
+        && myPrice<=mySI.ask-mySI.trade_stop_level*mySI.point
+        && OrderSend(mySI.symbol,OP_BUYLIMIT,myLots,myPrice,0,0,0,myComment,myMagicNum,0)>0
+       )
+    {
+        return(true);
+    }
+    if (   myType==OP_BUYSTOP
+        && myPrice>=mySI.ask+mySI.trade_stop_level*mySI.point
+        && OrderSend(mySI.symbol,OP_BUYSTOP,myLots,myPrice,0,0,0,myComment,myMagicNum,0)>0
+       )
+    {
+        return(true);
+    }
+    if (   myType==OP_SELL
+        && OrderSend(mySI.symbol,OP_SELL,myLots,mySI.bid,0,0,0,myComment,myMagicNum,0,clrRed)>0
+       )
+    {
+        return(true);
+    }
+    if (   myType==OP_SELLLIMIT
+        && myPrice>=mySI.bid+mySI.trade_stop_level*mySI.point
+        && OrderSend(mySI.symbol,OP_SELLLIMIT,myLots,myPrice,0,0,0,myComment,myMagicNum,0)>0
+       )
+    {
+        return(true);
+    }
+    if (   myType==OP_SELLSTOP
+        && myPrice<=mySI.bid-mySI.trade_stop_level*mySI.point
+        && OrderSend(mySI.symbol,OP_SELLSTOP,myLots,myPrice,0,0,0,myComment,myMagicNum,0)>0
+       )
+    {
+        return(true);
+    }
+    return(false);
+}
+/*
+函    数:刷新持仓单统计信息，增加了盈利单数量和亏损单数量统计
+输出参数:false-未统计，true-已统计
+算    法:统计myTO数组，给myTS赋值。其中最大盈利、最大亏损、最大保证金占用不重新计算
+*/
+bool lxRefreshTS_laoxu(TradesOrders       &myTO[],    //持仓单数组
+                       TradesStatistical  &myTS,      //统计结果
+                       AccountInfo        &myAI,      //账户信息
+                       SymbolInfo         &mySI       //商品信息
+                      ) export
+{
+   double  myBuyValue=0,mySellValue=0;
+//--- 初始化myTS,其中最大盈利、最大亏损、最大保证金占用不重新计算
+   myTS.symbol=mySI.symbol;
+   myTS.buy_orders=NULL;
+   myTS.buy_profit_orders=NULL;
+   myTS.buy_loss_orders=NULL;
+   myTS.buylimit_orders=NULL;
+   myTS.buystop_orders=NULL;
+   myTS.buy_grp_lots=NULL;
+   myTS.buy_grp_profit=NULL;
+   myTS.buy_grp_avg=NULL;
+   myTS.buy_grp_margin=NULL;
+   myTS.buy_grp_cost=NULL;
+
+   myTS.sell_orders=NULL;
+   myTS.sell_profit_orders=NULL;
+   myTS.sell_loss_orders=NULL;
+   myTS.selllimit_orders=NULL;
+   myTS.sellstop_orders=NULL;
+   myTS.sell_grp_lots=NULL;
+   myTS.sell_grp_profit=NULL;
+   myTS.sell_grp_avg=NULL;
+   myTS.sell_grp_margin=NULL;
+   myTS.sell_grp_cost=NULL;
+
+   if(ArraySize(myTO)==0) return(false); //订单数组为空，不计算
+//--- 统计分组信息
+   for(int cnt=0;cnt<ArraySize(myTO);cnt++)
+     {
+      if(myTO[cnt].ticket>0 && myTO[cnt].type==OP_BUY)
+        {
+         myTS.buy_orders++;  //Buy单数量总计
+         myTS.buy_grp_lots=myTS.buy_grp_lots+myTO[cnt].lots; //Buy组成交持仓单建仓量总计
+         myTS.buy_grp_cost=myTS.buy_grp_cost+myTO[cnt].cost; //Buy组成交持仓单成本总计
+         myTS.buy_grp_profit=myTS.buy_grp_profit+myTO[cnt].profit+myTO[cnt].swap+myTO[cnt].commission;   //Buy组成交持仓单利润总计
+         myBuyValue=myBuyValue+myTO[cnt].openprice*myTO[cnt].lots;   //Buy组总价值
+        }
+      if(myTO[cnt].ticket>0 && myTO[cnt].type==OP_BUY && myTO[cnt].profit>0)
+        {
+         myTS.buy_profit_orders++; //外加统计盈利单数量
+        }
+      if(myTO[cnt].ticket>0 && myTO[cnt].type==OP_BUY && myTO[cnt].profit<0)
+        {
+         myTS.buy_loss_orders++;  //外加统计亏损单数量
+        }
+      if(myTO[cnt].ticket>0 && myTO[cnt].type==OP_BUYLIMIT)
+        {
+         myTS.buylimit_orders++;  //BuyLimit单数量总计
+        }
+      if(myTO[cnt].ticket>0 && myTO[cnt].type==OP_BUYSTOP)
+        {
+         myTS.buystop_orders++;  //BuyStop单数量总计
+        }
+      if(myTO[cnt].ticket>0 && myTO[cnt].type==OP_SELL)
+        {
+         myTS.sell_orders++;  //Sell单数量总计
+         myTS.sell_grp_lots=myTS.sell_grp_lots+myTO[cnt].lots; //Sell组成交持仓单建仓量总计
+         myTS.sell_grp_cost=myTS.sell_grp_cost+myTO[cnt].cost; //Sell组成交持仓单成本总计
+         myTS.sell_grp_profit=myTS.sell_grp_profit+myTO[cnt].profit+myTO[cnt].swap+myTO[cnt].commission;   //Sell组成交持仓单利润总计
+         mySellValue=mySellValue+myTO[cnt].openprice*myTO[cnt].lots;   //Sell组总价值
+        }
+      if(myTO[cnt].ticket>0 && myTO[cnt].type==OP_SELL && myTO[cnt].profit>0)
+        {
+         myTS.sell_profit_orders++;  //外加统计亏损单数量
+        }
+      if(myTO[cnt].ticket>0 && myTO[cnt].type==OP_SELL && myTO[cnt].profit<0)
+        {
+         myTS.sell_loss_orders++;  //外加统计亏损单数量
+        }
+      if(myTO[cnt].ticket>0 && myTO[cnt].type==OP_SELLLIMIT)
+        {
+         myTS.selllimit_orders++;  //SellLimit单数量总计
+        }
+      if(myTO[cnt].ticket>0 && myTO[cnt].type==OP_SELLSTOP)
+        {
+         myTS.sellstop_orders++;  //SellStop单数量总计
+        }
+     }
+//组均价
+   if(myTS.buy_grp_lots>0) myTS.buy_grp_avg=myBuyValue/myTS.buy_grp_lots;
+   if(myTS.sell_grp_lots>0) myTS.sell_grp_avg=mySellValue/myTS.sell_grp_lots;
+   return(true);
+}
+/*
+函    数：刷新环境变量(当前商品)
+输出参数：
+算法说明：
+*/
+bool    lxRefreshEV_laoxu(AccountInfo   &myAI,    //账户信息
+                          SymbolInfo    &mySI     //商品信息
+                         )  export
+{
+        mySI.bid=SymbolInfoDouble(Symbol(),SYMBOL_BID);                                   //卖出报价
+        mySI.ask=SymbolInfoDouble(Symbol(),SYMBOL_ASK);                                   //买入报价
+        mySI.trade_stop_level=(int)SymbolInfoInteger(Symbol(),SYMBOL_TRADE_STOPS_LEVEL);  //停止水平
+        mySI.trade_tick_value=SymbolInfoDouble(Symbol(),SYMBOL_TRADE_TICK_VALUE);         //单点价值
+        mySI.point=SymbolInfoDouble(Symbol(),SYMBOL_POINT);                               //报价单位
+        mySI.symbol=Symbol();                                                             //当前商品名称
+        mySI.spread=(int)SymbolInfoInteger(Symbol(),SYMBOL_SPREAD);                       //点差
+        mySI.digits=(int)SymbolInfoInteger(Symbol(),SYMBOL_DIGITS);                       //报价小数位数 
+        mySI.volume_min=SymbolInfoDouble(Symbol(),SYMBOL_VOLUME_MIN);                     //最小建仓量
+        mySI.volume_max=SymbolInfoDouble(Symbol(),SYMBOL_VOLUME_MAX);                     //最大建仓量
+        mySI.time=(datetime)SymbolInfoInteger(Symbol(),SYMBOL_TIME);                        //最后报价时间
+        return(true);
+}
+/*
+函 数：物件颜色
+输入参数：数值
+输出参数：颜色
+算 法：负数为红色，正数为绿色，0为灰色
+*/
+color  lxColor_number(double myProfit)  export
+{
+   color  Color=clrRed;
+   if (myProfit>0)  Color=clrLime;   //正数颜色为绿色
+   if (myProfit<0)  Color=clrRed;    //负数颜色为红色
+   if (myProfit==0)  Color=clrDarkGray;    //0 颜色为灰色
+   return (Color);
+}
+/*
+函    数:推送信息
+输出参数:true-成功，False-不推送
+算    法:
+*/
+bool lxSendInfo(string  myInfo,                 //推送信息
+                bool    my_Alert_Window=false,  //弹出窗口推送
+                bool    my_Alert_EMail=false,   //邮件推送
+                bool    my_Alert_APP=false      //手机APP推送
+               )  export
+{
+    if (my_Alert_Window) Alert(myInfo);
+    if (my_Alert_EMail)  SendMail(myInfo,myInfo);
+    if (my_Alert_APP)    SendNotification(myInfo);
+    return(true);
+}
+/*
+函    数：持仓单定位
+输出参数：持仓单在myTO数组中的位置,-1表示找不到订单
+算法说明：
+*/
+int lxOrderPos(TradesOrders     &myTO[],    //持仓单数组
+               int              myTicket    //订单号
+              )  export
+{
+    if (myTicket<=0 || ArraySize(myTO)==0) return(-1);
+    for (int cnt=0;cnt<ArraySize(myTO);cnt++)
+    {
+        if (myTO[cnt].ticket==myTicket) return(cnt);
+    }
+    return(-1);
+}
+/*
+函    数：持仓单定位搜索
+输出参数：订单号，-1表示无订单
+算法说明：冒泡
+针对指定的订单数组执行按组合条件定位搜索。
+*/
+int lxOrderLocationSearch(TradesOrders   &myTO[],        //持仓单数组
+                          string         mySymbol,       //商品名称，Symbol()为当前图表商品名，"*"为所有商品
+                          int            mySeekMode,     //排序类型 0-按建仓时间,1-按建仓价,2-按盈利,3-按亏损
+                          int            myOrderType,    //订单类型 0-Buy,1-Sell,2-BuyLimit,3-SellLimit,4-BuyStop,5-SellStop,9-所有
+                          int            myMagicNum,     //程序识别码，-1-所有订单
+                          int            mySerialNumber  //排序1为最大，2为次大，以此类推，-1为最小，-2为次小，以此类推
+                         )  export
+{
+    int cnt=0,i=0;  //循环计数器变量
+    //没有持仓单，不执行
+    if (OrdersTotal()<=0) return(-1); 
+    lxOrdersArraySort(myTO,mySymbol,mySeekMode);
+    switch (mySeekMode)
+    {
+        case 0: //持仓单数组的建仓时间按降序排列
+        {
+            //按3、4、5条件筛选
+            if (mySerialNumber>0) //从大到小
+            {
+                i=1;
+                for (cnt=0;cnt<ArraySize(myTO);cnt++)
+                {
+                    if (   (mySymbol=="*" || mySymbol==myTO[cnt].symbol) //商品名称
+                        && (myOrderType==9 || myOrderType==myTO[cnt].type) //订单类型
+                        && (myMagicNum==-1 || myMagicNum==myTO[cnt].magicnumber) //程序识别码
+                       )
+                    {
+                        if (mySerialNumber==i) return(myTO[cnt].ticket); //符合顺序的订单
+                        i++; 
+                    }
+                }
+            }
+            if (mySerialNumber<0) //从小到大
+            {
+                i=-1;
+                for (cnt=ArraySize(myTO)-1;cnt>=0;cnt--)
+                {
+                    if (   (mySymbol=="*" || mySymbol==myTO[cnt].symbol) //商品名称
+                        && (myOrderType==9 || myOrderType==myTO[cnt].type) //订单类型
+                        && (myMagicNum==-1 || myMagicNum==myTO[cnt].magicnumber) //程序识别码
+                       )
+                    {
+                        if (mySerialNumber==i) return(myTO[cnt].ticket); //符合顺序的订单
+                        i--; 
+                    }
+                }
+            }
+            break;
+        }
+        case 1: //持仓单数组的建价按降序排列
+        {
+            //按3、4、5条件筛选
+            if (mySerialNumber>0) //从大到小
+            {
+                i=1;
+                for (cnt=0;cnt<ArraySize(myTO);cnt++)
+                {
+                    if (   (mySymbol=="*" || mySymbol==myTO[cnt].symbol) //商品名称
+                        && (myOrderType==9 || myOrderType==myTO[cnt].type) //订单类型
+                        && (myMagicNum==-1 || myMagicNum==myTO[cnt].magicnumber) //程序识别码
+                       )
+                    {
+                        if (mySerialNumber==i) return(myTO[cnt].ticket); //符合顺序的订单
+                        i++; 
+                    }
+                }
+            }
+            if (mySerialNumber<0) //从小到大
+            {
+                i=-1;
+                for (cnt=ArraySize(myTO)-1;cnt>=0;cnt--)
+                {
+                    if (   (mySymbol=="*" || mySymbol==myTO[cnt].symbol) //商品名称
+                        && (myOrderType==9 || myOrderType==myTO[cnt].type) //订单类型
+                        && (myMagicNum==-1 || myMagicNum==myTO[cnt].magicnumber) //程序识别码
+                       )
+                    {
+                        if (mySerialNumber==i) return(myTO[cnt].ticket); //符合顺序的订单
+                        i--; 
+                    }
+                }
+            }
+            break;
+        }
+        case 2: //持仓单数组的利润按降序排列  浮动盈利
+        {
+            //按3、4、5条件筛选
+            if (mySerialNumber>0) //从大到小
+            {
+                i=1;
+                for (cnt=0;cnt<ArraySize(myTO);cnt++)
+                {
+                    if (   (mySymbol=="*" || mySymbol==myTO[cnt].symbol) //商品名称
+                        && (myOrderType==9 || myOrderType==myTO[cnt].type) //订单类型
+                        && (myMagicNum==-1 || myMagicNum==myTO[cnt].magicnumber) //程序识别码
+                        && myTO[cnt].profit>0 //浮盈
+                       )
+                    {
+                        if (mySerialNumber==i) return(myTO[cnt].ticket); //符合顺序的订单
+                        i++; 
+                    }
+                }
+            }
+            if (mySerialNumber<0) //从小到大
+            {
+                i=-1;
+                for (cnt=ArraySize(myTO)-1;cnt>=0;cnt--)
+                {
+                    if (   (mySymbol=="*" || mySymbol==myTO[cnt].symbol) //商品名称
+                        && (myOrderType==9 || myOrderType==myTO[cnt].type) //订单类型
+                        && (myMagicNum==-1 || myMagicNum==myTO[cnt].magicnumber) //程序识别码
+                        && myTO[cnt].profit>0 //浮盈
+                       )
+                    {
+                        if (mySerialNumber==i) return(myTO[cnt].ticket); //符合顺序的订单
+                        i--; 
+                    }
+                }
+            }
+            break;
+        }
+        case 3: //持仓单数组的利润按降序排列  浮动亏损
+        {
+            //按3、4、5条件筛选
+            if (mySerialNumber>0) //从大到小
+            {
+                i=1;
+                for (cnt=ArraySize(myTO)-1;cnt>=0;cnt--)
+                {
+                    if (   (mySymbol=="*" || mySymbol==myTO[cnt].symbol) //商品名称
+                        && (myOrderType==9 || myOrderType==myTO[cnt].type) //订单类型
+                        && (myMagicNum==-1 || myMagicNum==myTO[cnt].magicnumber) //程序识别码
+                        && myTO[cnt].profit<0 //浮亏
+                       )
+                    {
+                        if (mySerialNumber==i) return(myTO[cnt].ticket); //符合顺序的订单
+                        i++; 
+                    }
+                }
+            }
+            if (mySerialNumber<0) //从小到大
+            {
+                i=-1;
+                for (cnt=0;cnt<ArraySize(myTO);cnt++)
+                {
+                    if (   (mySymbol=="*" || mySymbol==myTO[cnt].symbol) //商品名称
+                        && (myOrderType==9 || myOrderType==myTO[cnt].type) //订单类型
+                        && (myMagicNum==-1 || myMagicNum==myTO[cnt].magicnumber) //程序识别码
+                        && myTO[cnt].profit<0 //浮亏
+                       )
+                    {
+                        if (mySerialNumber==i) return(myTO[cnt].ticket); //符合顺序的订单
+                        i--; 
+                    }
+                }
+            }
+            break;
+        }
+    }
+    return(-1);
+}
+/*
+函    数:输出可编辑文字到图表
+输出参数:true-输出成功
+算    法:
+*/
+bool    lxEditOut(const     bool             isout=true,               //允许输出
+                  const     long             chart_ID=0,               //主图ID
+                  const     string           name="Edit",              //对象名称
+                  const     int              sub_window=0,             //副图编号
+                  const     int              x=0,                      //x坐标
+                  const     int              y=0,                      //y坐标
+                  const     int              width=50,                 //编辑框宽度
+                  const     int              height=18,                //编辑框高度
+                  const     string           text="Text",              //编辑内容
+                  const     string           font="Arial",             //字体
+                  const     int              font_size=10,             //字号
+                  const     ENUM_ALIGN_MODE  align=ALIGN_CENTER,       //对齐方式
+                  const     bool             read_only=false,          //禁止编辑
+                  const     ENUM_BASE_CORNER corner=CORNER_LEFT_UPPER, //锚点位置
+                  const     color            clr=clrBlack,             //字色
+                  const     color            back_clr=clrWhite,        //背景色
+                  const     color            border_clr=clrNONE,       //边框色
+                  const     bool             back=false,               //设置为背景
+                  const     bool             selection=false,          //高亮移动
+                  const     bool             hidden=true,              //列表中隐藏对象名
+                  const     long             z_order=0                 // priority for mouse click
+                 )  export
+{
+    if (!isout) return(true);
+    //更改对象属性
+    if (ObjectFind(chart_ID,name)==-1)
+    {
+        //创建输出对象
+        ObjectCreate(chart_ID,name,OBJ_EDIT,sub_window,0,0);        
+    }
+    ObjectSetInteger(chart_ID,name,OBJPROP_XDISTANCE,x);
+    ObjectSetInteger(chart_ID,name,OBJPROP_YDISTANCE,y);
+    ObjectSetInteger(chart_ID,name,OBJPROP_XSIZE,width);
+    ObjectSetInteger(chart_ID,name,OBJPROP_YSIZE,height);
+    ObjectSetString(chart_ID,name,OBJPROP_TEXT,text);
+    ObjectSetString(chart_ID,name,OBJPROP_FONT,font);
+    ObjectSetInteger(chart_ID,name,OBJPROP_FONTSIZE,font_size);
+    ObjectSetInteger(chart_ID,name,OBJPROP_ALIGN,align);
+    ObjectSetInteger(chart_ID,name,OBJPROP_READONLY,read_only);
+    ObjectSetInteger(chart_ID,name,OBJPROP_CORNER,corner);
+    ObjectSetInteger(chart_ID,name,OBJPROP_COLOR,clr);
+    ObjectSetInteger(chart_ID,name,OBJPROP_BGCOLOR,back_clr);
+    ObjectSetInteger(chart_ID,name,OBJPROP_BORDER_COLOR,border_clr);
+    ObjectSetInteger(chart_ID,name,OBJPROP_BACK,back);
+    ObjectSetInteger(chart_ID,name,OBJPROP_SELECTABLE,selection);
+    ObjectSetInteger(chart_ID,name,OBJPROP_SELECTED,selection);
+    ObjectSetInteger(chart_ID,name,OBJPROP_HIDDEN,hidden);
+    ObjectSetInteger(chart_ID,name,OBJPROP_ZORDER,z_order);
+    return(true);
+}
+//菜单显示信息  
+void lxMenu_Message(long         myChartID,
+                    MenuControl &myMC,        //菜单号
+                    int          myValue,     //显示文字需要减去的像素数
+                   ) export
+{
+   if(myMC.now==true)
+   {     
+      int x=myMC.x+lxScale(10),y=myMC.y+myMC.height-lxScale(myValue),g=lxScale(20);
+      lxLableOut(true,myMC.message[0],myMC.name+"Message1",10,clrWhite,myChartID,0,0,x,y,"微软雅黑");
+      lxLableOut(true,myMC.message[1],myMC.name+"Message2",10,clrWhite,0,0,0,x,y+g,"微软雅黑");      
+   } 
+}
+//通用画按钮函数
+void  lxButtonDraw(MenuControl  &myMC,
+                   int  bt_number=3,           //每行显示的按钮数量
+                   int  const bt_start=3,      //按钮开始的按钮序号
+                   int  const bt_end=10,       //按钮结束的按钮序号
+                   int  const bt_width=67,     //按钮宽度，一个为204，二个为102间距104，三个为67间距69，四个为50间距52
+                   int  const bt_interval=69,  //按钮间距
+                   int  const bt_height=22,    //按钮高度
+                   int  const bt_linewidth=25, //按钮行距
+                   int  const bt_x=8,          //按钮初始x位置
+                   int  const bt_y=50,         //按钮初始y位置
+                  )
+{
+   int  bt_count=0;      //计数画按钮的个数，达到后换行
+   int  bt_linenumber=0; //按钮行数计数用
+   for (int i=bt_start;i<=bt_end;i++)
+   {      
+      if (bt_count==bt_number)  {bt_count=0;bt_linenumber++;}
+      lxButtonOut(true,0,myMC.BS[i].name,0,myMC.x+lxScale(bt_x+bt_count*bt_interval),myMC.y+lxScale(bt_y+bt_linenumber*bt_linewidth),lxScale(bt_width),lxScale(bt_height),0,lxBSText(myMC.BS[i]),"微软雅黑",10,clrWhite,lxBSColor(myMC.BS[i]),clrWhite);
+      bt_count++;
+   } 
+} 
+/*
+函    数：物件颜色
+输入参数：bool
+输出参数：颜色
+算    法：true为绿色，false为红色
+*/
+color lxColor_bool(bool myBool) export
+{
+   color Color=clrRed;
+   if(myBool) Color=clrGreen; else Color=clrRed;  //true为绿色，false为红色
+   return(Color);
+}
+/*
+函    数:输出矩形到图表
+输出参数:true-输出成功
+算    法:
+*/
+bool    lxRectangleOut(const    bool                 isout=true,                 //允许输出
+                       const    long                 chart_ID=0,                 //主图ID
+                       const    string               name="RectLabel",           //对象名称
+                       const    int                  sub_window=0,               //副图编号
+                       const    int                  x=0,                        //x坐标
+                       const    int                  y=0,                        //y坐标
+                       const    int                  width=50,                   //矩形宽度
+                       const    int                  height=18,                  //矩形高度
+                       const    color                back_clr=clrGray,           //背景色
+                       const    ENUM_BORDER_TYPE     border=BORDER_SUNKEN,       //矩形效果
+                       const    ENUM_BASE_CORNER     corner=CORNER_LEFT_UPPER,   //锚点
+                       const    color                clr=clrRed,                 //边框颜色
+                       const    ENUM_LINE_STYLE      style=STYLE_SOLID,          //边框类型
+                       const    int                  line_width=1,               //边框宽度
+                       const    bool                 back=false,                 //设置为背景
+                       const    bool                 selection=false,            //高亮移动
+                       const    bool                 hidden=true,                //列表中隐藏对象名
+                       const    long                 z_order=0                   // priority for mouse click
+                      )  export
+{
+    if (!isout) return(true);
+    //更改对象属性
+    if (ObjectFind(chart_ID,name)==-1)
+    {
+        //创建输出对象
+        ObjectCreate(chart_ID,name,OBJ_RECTANGLE_LABEL,sub_window,0,0);        
+    }
+    ObjectSetInteger(chart_ID,name,OBJPROP_XDISTANCE,x);
+    ObjectSetInteger(chart_ID,name,OBJPROP_YDISTANCE,y);
+    ObjectSetInteger(chart_ID,name,OBJPROP_XSIZE,width);
+    ObjectSetInteger(chart_ID,name,OBJPROP_YSIZE,height);
+    ObjectSetInteger(chart_ID,name,OBJPROP_BGCOLOR,back_clr);
+    ObjectSetInteger(chart_ID,name,OBJPROP_BORDER_TYPE,border);
+    ObjectSetInteger(chart_ID,name,OBJPROP_CORNER,corner);
+    ObjectSetInteger(chart_ID,name,OBJPROP_COLOR,clr);
+    ObjectSetInteger(chart_ID,name,OBJPROP_STYLE,style);
+    ObjectSetInteger(chart_ID,name,OBJPROP_WIDTH,line_width);
+    ObjectSetInteger(chart_ID,name,OBJPROP_BACK,back);
+    ObjectSetInteger(chart_ID,name,OBJPROP_SELECTABLE,selection);
+    ObjectSetInteger(chart_ID,name,OBJPROP_SELECTED,selection);
+    ObjectSetInteger(chart_ID,name,OBJPROP_HIDDEN,hidden);
+    ObjectSetInteger(chart_ID,name,OBJPROP_ZORDER,z_order);
+    return(true);
+}
+/*
+函    数:选择订单，从TO数组中选择符合条件的订单，将ticket存储到目标数组
+输出参数:  
+算    法:这个函数是单magic版
+*/
+bool lxSelectOrders(TradesOrders &myTO[], //持仓单源数组
+                    int &myCloseTicket[], //选择单目标数组
+                    int myType,           //订单类型， 0-Buy,1-Sell,2-BuyLimit,3-SellLimit,4-BuyStop,5-SellStop,9-所有
+                                          //           10-(Buy和Sell),11-(所有挂单),12-(所有多类型),13-(所有空类型), 
+                                          //           14-(多挂单),15-(空挂单) 
+                    int myMagic           //订单识别号,-1为所有maigc
+                    ) export
+{
+   int i=0,j=0;  //循环计数器变量
+   ArrayInitialize(myCloseTicket,-1);
+   for (i=0;i<ArraySize(myTO);i++)
+   {
+      if (   myTO[i].ticket>0 //有效持仓单
+          && lxDetectionType(myTO[i].type,myType) //平仓单类型,指定类型
+          && (  myTO[i].magicnumber==myMagic || myMagic==-1) //检测订单识别号是否是本程序的            
+         )
+      {
+          myCloseTicket[j]=myTO[i].ticket;
+          j++;
+      }
+   }
+   if (myCloseTicket[0]>0) return(true);
+   return(false);
+}
+/*
+函    数：交易延时
+输出参数：
+算法说明：
+*/
+void lxTradeDelay(int myDelayTime   //延时(毫秒)
+                 )  export
+{
+    while (!IsTradeAllowed() || IsTradeContextBusy()) Sleep(myDelayTime);
+    RefreshRates();
+    return;
+}
+/*
+函    数：有效时间段
+输出参数：true-有效  false-无效
+算    法：
+*/
+bool lxTimeValid(string myStartTime,    //开始时间，标准格式为hh:mm
+                 string myEndTime,      //结束时间，标准格式为hh:mm
+                 bool myServerTime      //true为服务器时间, false为计算机时间
+                )  export
+{
+    if (myStartTime==myEndTime) return(true);
+    int myST=0,myET=0;
+    if (myServerTime==true) //计算服务器起止时间
+    {
+        myST=(int)StrToTime((string)Year()+"."+(string)Month()+"."+(string)Day()+" "+myStartTime);
+        myET=(int)StrToTime((string)Year()+"."+(string)Month()+"."+(string)Day()+" "+myEndTime);
+        if (TimeCurrent()>myST && TimeCurrent()<myET) return(true);
+        if (   myST>myET //开始时间大于结束时间
+            && (   (TimeCurrent()>myST-1440*60 && TimeCurrent()<myET) //早上时间段
+                || TimeCurrent()>myST //晚上时间段
+               )
+           )
+        {
+            return(true);
+        }
+    }
+    if (myServerTime==false) //计算本地计算机起止时间
+    {
+        myST=(int)StrToTime(myStartTime);
+        myET=(int)StrToTime(myEndTime);
+        if (TimeLocal()>myST && TimeLocal()<myET) return(true);
+        if (   myST>myET
+            && (   (TimeLocal()>myST-1440*60 && TimeLocal()<myET)
+                || TimeLocal()>myST
+               )
+           )
+        {
+            return(true);
+        }
+    }
+    return(false);
+}
+/*
+函    数：货币及交易信息在右上角显示函数
+输出参数：右上角显示交易信息，可以打开和关闭
+算法说明：
+*/  
+void lxMenu_Right(TradesStatistical &myEA,   //本EA的TS
+                  long               myChartId,
+                  string             myPrvfix,
+                 ) export
+{
+   if (ObjectFind(myChartId,myPrvfix+"symbol")==-1)  //如果检测不到按钮的话，重写按钮
+   {
+      lxButtonOut(true,myChartId,myPrvfix+"symbol",0,lxScale(20),lxScale(20),lxScale(18),lxScale(18),CORNER_RIGHT_UPPER,"<","Arial",12,clrWhite,clrRed,clrWhite);
+   } 
+   if(ObjectGetInteger(0,myPrvfix+"symbol",OBJPROP_STATE,true)==true)
+   {
+      ObjectSetInteger(0,myPrvfix+"symbol",OBJPROP_BGCOLOR,clrGreen);
+      ObjectSetString(0,myPrvfix+"symbol",OBJPROP_TEXT,">");
+      int    xsy=100+StringLen(Symbol())*13/2;  //货币名称显示的X值
+      int    x1=lxScale(120),x2=lxScale(32);
+      int    y=lxScale(60),h=0,l=lxScale(15);
+      lxLableOut(true,Symbol(),myPrvfix+"Right_Symbol",14,clrDodgerBlue,0,0,1,lxScale(xsy),lxScale(16),"Arial Bold");
+      lxLableOut(true,TimeToStr(TimeCurrent(),TIME_DATE|TIME_MINUTES|TIME_SECONDS),myPrvfix+"Right_Time",10,clrWhite,0,0,1,lxScale(156),lxScale(40));
+      lxLableOut(true,"空单组",myPrvfix+"Right_SellGroup",10,clrRed  ,0,0,1,x1,y-lxScale(4)  ,"微软雅黑",0,ANCHOR_RIGHT_UPPER);h++;
+      lxLableOut(true,(string)myEA.sell_orders+"  "+(string)myEA.selllimit_orders+"  "+(string)myEA.sellstop_orders,myPrvfix+"Right_0",10,lxColor_number(myEA.sell_grp_profit),0,0,1,x1,y+h*l,"Arial",0,ANCHOR_RIGHT_UPPER);h++;
+      lxLableOut(true,DoubleToStr(myEA.sell_grp_lots   ,2 ),myPrvfix+"Right_1"  ,10,lxColor_number(myEA.sell_grp_profit),0,0,1,x1,y+h*l,"Arial",0,ANCHOR_RIGHT_UPPER);h++;
+      lxLableOut(true,DoubleToStr(myEA.sell_grp_profit ,2 ),myPrvfix+"Right_2",10,lxColor_number(myEA.sell_grp_profit),0,0,1,x1,y+h*l,"Arial",0,ANCHOR_RIGHT_UPPER);h++;
+      lxLableOut(true,DoubleToStr(myEA.sell_grp_avg,Digits),myPrvfix+"Right_3"   ,10,lxColor_number(myEA.sell_grp_profit),0,0,1,x1,y+h*l,"Arial",0,ANCHOR_RIGHT_UPPER);h++;
+      lxLableOut(true,DoubleToStr(myEA.max_floating_loss,2),myPrvfix+"Right_8",10,clrRed,0,0,1,x1,y+h*l,"Arial",0,ANCHOR_RIGHT_UPPER);h++;
+      lxLableOut(true,"掉期",myPrvfix+"Right_swap1"   ,10,clrDodgerBlue,0,0,1,x1,y+h*l,"微软雅黑",0,ANCHOR_RIGHT_UPPER);h++;
+      lxLableOut(true,DoubleToStr(SymbolInfoDouble(Symbol(),SYMBOL_SWAP_SHORT),2),myPrvfix+"Right_swapsell",10,lxColor_number(SymbolInfoDouble(Symbol(),SYMBOL_SWAP_SHORT)),0,0,1,x1,y+6+h*l,"Arial",0,ANCHOR_RIGHT_UPPER);    
+      y=lxScale(60);h=0;l=lxScale(15);
+      lxLableOut(true,"多单组",myPrvfix+"Right_BuyGroup",10,clrLime ,0,0,1,x2,y-lxScale(4)  ,"微软雅黑",0,ANCHOR_RIGHT_UPPER,false,false,true);h++;
+      lxLableOut(true,(string)myEA.buy_orders+"  "+(string)myEA.buylimit_orders+"  "+(string)myEA.buystop_orders,myPrvfix+"Right_4",10,lxColor_number(myEA.buy_grp_profit),0,0,1,x2,y+h*l,"Arial",0,ANCHOR_RIGHT_UPPER);h++;
+      lxLableOut(true,DoubleToStr(myEA.buy_grp_lots  ,2   ),myPrvfix+"Right_5"  ,10,lxColor_number(myEA.buy_grp_profit),0,0,1,x2,y+h*l,"Arial",0,ANCHOR_RIGHT_UPPER);h++;
+      lxLableOut(true,DoubleToStr(myEA.buy_grp_profit,2   ),myPrvfix+"Right_6",10,lxColor_number(myEA.buy_grp_profit),0,0,1,x2,y+h*l,"Arial",0,ANCHOR_RIGHT_UPPER);h++;
+      lxLableOut(true,DoubleToStr(myEA.buy_grp_avg,Digits ),myPrvfix+"Right_7"   ,10,lxColor_number(myEA.buy_grp_profit),0,0,1,x2,y+h*l,"Arial",0,ANCHOR_RIGHT_UPPER);h++;
+      lxLableOut(true,DoubleToStr(myEA.max_floating_profit,2),myPrvfix+"Right_9",10,clrLime,0,0,1,x2,y+h*l,"Arial",0,ANCHOR_RIGHT_UPPER);h++;
+      lxLableOut(true,"掉期",myPrvfix+"Right_swap2"   ,10,clrDodgerBlue,0,0,1,x2,y+h*l,"微软雅黑",0,ANCHOR_RIGHT_UPPER);h++;
+      lxLableOut(true,DoubleToStr(SymbolInfoDouble(Symbol(),SYMBOL_SWAP_LONG),2), myPrvfix+"Right_swapbuy", 10,lxColor_number(SymbolInfoDouble(Symbol(),SYMBOL_SWAP_LONG)),0,0,1,x2,y+6+h*l,"Arial",0,ANCHOR_RIGHT_UPPER);    
+      //lxLableOut(true,"点值: "+DoubleToStr(SymbolInfoDouble(Symbol(),SYMBOL_TRADE_TICK_VALUE),2), myPrvfix+"Right_tickvalue", 10,clrWhite,0,0,1,x1+lxScale(60),y+10+h*l,"微软雅黑",0);    
+      //lxLableOut(true,"杠杆: "+(string)AccountInfoInteger(ACCOUNT_LEVERAGE), myPrvfix+"Right_leverage", 10,clrWhite,0,0,1,x1-lxScale(30),y+10+h*l,"微软雅黑",0);h++;
+      
+      
+   }
+   if (ObjectGetInteger(0,myPrvfix+"symbol",OBJPROP_STATE,true)==false)
+   {
+      ObjectSetInteger(0,myPrvfix+"symbol",OBJPROP_BGCOLOR,clrRed);
+      ObjectSetString(0,myPrvfix+"symbol",OBJPROP_TEXT,"<");
+      if (ObjectFind(0,myPrvfix+"Right_Symbol")>-1)
+      {  lxObjectsDeleteByKeyword(0,myPrvfix+"Right_");}
+   }    
+}    
+//顶部持仓信息显示  
+void lxMenu_Top(double              myProfit,   //最大浮盈
+                double              myLoss,     //最大浮亏
+                string              myPrvfix,   //前缀关键字
+                color               myColor,    //显示颜色
+                color               myUpColor,  //上涨颜色
+                color               myDownColor,//下跌颜色
+               ) export
+{
+   if(ObjectFind(0,myPrvfix+"topinfo")==-1)  //如果检测不到按钮的话，重写按钮
+   {
+       lxButtonOut(true,0,myPrvfix+"topinfo",0,lxScale(236),lxScale(0),lxScale(30),lxScale(13),CORNER_LEFT_UPPER,"﹀","Arial",14,clrWhite,clrRed,clrWhite);      
+   }    
+   if(ObjectGetInteger(0,myPrvfix+"topinfo",OBJPROP_STATE,true))
+   {
+      lxButtonOut(true,0,myPrvfix+"reset",  0,lxScale(236),lxScale(12), lxScale(30),lxScale(13),CORNER_LEFT_UPPER,"reset","Arial",8,clrWhite,clrRed,clrWhite);      
+      ObjectSetInteger(0,myPrvfix+"topinfo",OBJPROP_BGCOLOR,clrGreen);
+      ObjectSetString(0,myPrvfix+"topinfo",OBJPROP_TEXT,"︿");
+      int x1=lxScale(270);
+      lxLableOut(true,"已用："+DoubleToString(AccountMargin(),2),myPrvfix+"OrderMarginUse",9,myColor,0,0,0,x1,0,"微软雅黑");x1=x1+lxScale(110);
+      lxLableOut(true,"可用："+DoubleToString((AccountEquity()-AccountMargin()),2),myPrvfix+"OrderMarginMay",9,myColor,0,0,0,x1,0,"微软雅黑");x1=x1+lxScale(110);
+      string myRate="";
+      if(AccountMargin()>0) myRate=DoubleToString((AccountEquity())/AccountMargin()*100,2)+"%";
+      lxLableOut(true,"比例："+myRate,myPrvfix+"OrderMarginRate",9,myColor,0,0,0,x1,0,"微软雅黑");x1=x1+lxScale(120);
+      lxLableOut(true,"最大浮盈："+DoubleToString(myProfit,2),myPrvfix+"OrderProfit_MaxProfit",9,myUpColor,0,0,0,x1,0,"微软雅黑");
+      x1=lxScale(270);
+      lxLableOut(true,"余额："+DoubleToString(AccountBalance(),2),myPrvfix+"OrderBalance",9,myColor,0,0,0,x1,lxScale(20),"微软雅黑");x1=x1+lxScale(110);
+      lxLableOut(true,"净值："+DoubleToString(AccountEquity(),2),myPrvfix+"OrderEquity",9,myColor,0,0,0,x1,lxScale(20),"微软雅黑");x1=x1+lxScale(110);
+      if (AccountProfit()>=0)  lxLableOut(true,"盈亏："+DoubleToString(AccountProfit(),2),myPrvfix+"OrderProfit",9,myUpColor,0,0,0,x1,lxScale(20),"微软雅黑");
+      if (AccountProfit()< 0)  lxLableOut(true,"盈亏："+DoubleToString(AccountProfit(),2),myPrvfix+"OrderProfit",9,myDownColor,0,0,0,x1,lxScale(20),"微软雅黑");x1=x1+lxScale(120);
+      lxLableOut(true,"最大浮亏："+DoubleToString(myLoss,2),myPrvfix+"OrderProfit_MaxLoss",9,myDownColor,0,0,0,x1,lxScale(20),"微软雅黑");
+   }
+   if(ObjectGetInteger(0,myPrvfix+"topinfo",OBJPROP_STATE,true)==false)
+   {
+      ObjectSetInteger(0,myPrvfix+"topinfo",OBJPROP_BGCOLOR,clrRed);
+      ObjectSetString(0,myPrvfix+"topinfo",OBJPROP_TEXT,"﹀");  
+      ObjectDelete(0,myPrvfix+"reset");
+      if (ObjectFind(0,myPrvfix+"OrderMarginMay")>-1)
+      {  lxObjectsDeleteByKeyword(0,myPrvfix+"Order");}
+   }
+} 
+//菜单移动函数，拖动条用
+bool  lxMenuMoveByItem(long          mylparam,      //系统值
+                       double        mydparam,      //系统值
+                       string        mysparam,      //系统值
+                       MenuControl  &myMC,          //需要移动的菜单
+                       bool          myCorner,      //控制面板位置
+                       bool          myTuoDongTiao  //是否显示拖动条
+                      ) export
+{
+   if (ObjectFind(0,myMC.name)==-1) return(false);
+   int myHeight=(int)ChartGetInteger(0,CHART_HEIGHT_IN_PIXELS,0);  //屏幕高
+   int myWidth =(int)ChartGetInteger(0,CHART_WIDTH_IN_PIXELS ,0);  //屏幕宽
+   int x=0,y,k,g,i,j=0;
+   if ((uint)mysparam!=1) //鼠标左键是否按下
+   {
+      ChartSetInteger(0,CHART_MOUSE_SCROLL,0,true);
+      if(myCorner==true ) x=(int)ObjectGetInteger(0,myMC.name,OBJPROP_XDISTANCE,0);
+      if(myCorner==false) x=myWidth-(int)ObjectGetInteger(0,myMC.name,OBJPROP_XDISTANCE,0);
+      y=(int)ObjectGetInteger(0,myMC.name,OBJPROP_YDISTANCE,0);
+      k=(int)ObjectGetInteger(0,myMC.name,OBJPROP_XSIZE,0);
+      g=30;
+      ArrayResize(myMC.move,ObjectsTotal());
+      for (i=ObjectsTotal()-1;i>=0;i--)
+      {
+         if (StringFind(ObjectName(i),myMC.name,0)>-1)
+         {
+            myMC.move[j].name=ObjectName(i);j++;
+         }
+      }
+      ArrayResize(myMC.move,j);
+      if (mylparam>x && mylparam<x+k && mydparam>y && mydparam<y+g)
+      {
+         string myTDT="";
+         if (myTuoDongTiao==true) myTDT="拖动条";
+         lxLableOut(true,myTDT,myMC.name+"item",6,clrWhite,0,0,CORNER_LEFT_UPPER,myMC.x+lxScale(10),myMC.y+lxScale(14),"微软雅黑");
+         if (myCorner==true ) myMC.x_new=myMC.x-(int)mylparam;
+         if (myCorner==false) myMC.x_new=myMC.x-(myWidth-(int)mylparam);
+         myMC.y_new=myMC.y-(int)mydparam;
+         myMC.moveallow=true;
+         for(i=0;i<ArraySize(myMC.move);i++)
+         {
+            myMC.move[i].x=(int)ObjectGetInteger(0,myMC.move[i].name,OBJPROP_XDISTANCE,0)-myMC.x;
+            myMC.move[i].y=(int)ObjectGetInteger(0,myMC.move[i].name,OBJPROP_YDISTANCE,0)-myMC.y;
+         }
+      }
+      else
+      {
+         myMC.moveallow=false;
+         if(ObjectFind(0,myMC.name+"item")>-1)  ObjectDelete(0,myMC.name+"item");
+      }
+   }
+   if((uint)mysparam==1 && myMC.moveallow==true)
+   {
+      ChartSetInteger(0,CHART_MOUSE_SCROLL,0,false);
+      if(myCorner==true ) myMC.x=(int)mylparam+myMC.x_new;
+      if(myCorner==false) myMC.x=myWidth-(int)mylparam+myMC.x_new;
+      myMC.y=(int)mydparam+myMC.y_new;
+      if (myMC.x<0) myMC.x=0;
+      if (myMC.y<0) myMC.y=0;
+      if (myMC.x>myWidth -40) myMC.x=myWidth -40;
+      if (myMC.y>myHeight-40) myMC.y=myHeight-40;
+      for (i=0;i<ArraySize(myMC.move);i++)
+      {
+         ObjectSetInteger(0,myMC.move[i].name,OBJPROP_XDISTANCE,myMC.x+myMC.move[i].x);
+         ObjectSetInteger(0,myMC.move[i].name,OBJPROP_YDISTANCE,myMC.y+myMC.move[i].y);
+      }
+   }
+   if(myMC.x_new==myMC.x)  return(false);  else  return(true);
+}
+void lxPromptMessage(long   mylparam,
+                     double mydparam,
+                     string myButtonName,
+                     string myPrompt
+                    ) export
+{
+   if (ObjectFind(0,myButtonName)==-1) return;
+   int x=(int)ObjectGetInteger(0,myButtonName,OBJPROP_XDISTANCE,0);
+   int y=(int)ObjectGetInteger(0,myButtonName,OBJPROP_YDISTANCE,0);
+   int k=(int)ObjectGetInteger(0,myButtonName,OBJPROP_XSIZE,0);
+   int g=(int)ObjectGetInteger(0,myButtonName,OBJPROP_YSIZE,0);
+   int myLen=StringLen(myPrompt)*13;
+   if (mylparam>x && mylparam<x+k && mydparam>y && mydparam<y+g)
+   {
+       lxEditOut(true,0,myButtonName+"prompt",0,(int)mylparam+lxScale(10),(int)mydparam+lxScale(10),lxScale(myLen),lxScale(30),myPrompt,"微软雅黑",9,ALIGN_CENTER,1,0,clrWhite,clrCadetBlue,clrWhite);
+   }
+   if ((mylparam<x || mylparam>x+k || mydparam<y || mydparam>y+g) && ObjectFind(0,myButtonName+"prompt")>-1)  
+   {  if (ObjectFind(0,myButtonName+"prompt")>-1)  ObjectDelete(0,myButtonName+"prompt");}
+}
+//为按钮初始赋值
+void lxButton_Input(MenuControl  &myMC,
+                    ButtonStatus &myButton,
+                    int     myProperty,    //按钮属性
+                    bool    myStatus,      //按钮状态
+                    string  myButtonName,  //按钮名称，控制用
+                    const   color   myColorTrue = clrGreen,  //真时的按钮底色
+                    const   color   myColorFalse = clrRed,   //假时的按钮底色 
+                    const   string  myButtonTrue = "",   //真时显示的按钮名字
+                    const   string  myButtonFalse = "",  //假时显示的按钮名字
+                    const   string  myTextTrue = "",   //真时输出的信息
+                    const   string  myTextFalse = "",  //假时输出的信息
+                    const   string  myHelp = "",               //提示信息
+                    const   string  myEdit = "",               //编辑框内容                 
+                    const   int     myFontSize = 10,           //显示文字大小
+                    const   string  myFont = "微软雅黑",       //字体
+                    const   color   myColorBorder = clrWhite,  //边框色
+                    const   int     myK = 40,           //宽
+                    const   int     myG = 40,           //高                       
+                    //const  int     x,           //位置x
+                    //const  int     y,           //位置y
+                   )   export               
+{
+    myButton.status      = myStatus;
+    myButton.name        = myMC.name+myButtonName;
+    myButton.property    = myProperty;
+    myButton.bordercolor = myColorBorder;  //边框色      
+    myButton.nametrue    = myButtonTrue;
+    myButton.namefalse   = myButtonFalse;
+    myButton.colortrue   = myColorTrue;
+    myButton.colorfalse  = myColorFalse;
+    myButton.texttrue    = myTextTrue;
+    myButton.textfalse   = myTextFalse;
+    myButton.help        = myHelp;         //提示信息
+    myButton.fontsize    = myFontSize;     //显示文字大小
+    myButton.font        = myFont;         //字体
+    myButton.edit        = myEdit;         //编辑框 
+    myButton.k           = myK;            //字体
+    myButton.g           = myG;            //编辑框     
+} 
+/*
+函    数:建仓量整形
+输出参数:符合平台规定格式的开仓量。-1表示整形失败
+算    法:调整不规范的开仓量数据，按照四舍五入原则及平台开仓量格式规范数据
+*/
+double lxLotsFormat(string   mySymbol,   //货币对名称
+                    double   myLots      //需要整形的开仓量
+                   )  export
+{
+    double myBase=SymbolInfoDouble(mySymbol,SYMBOL_VOLUME_STEP);
+    if (myBase!=0) return(MathRound(myLots/myBase)*myBase);
+    return(-1);
+}
+/*
+函    数：持仓单单数组按类型排序
+输出参数：
+算法说明：冒泡
+针对指定的订单数组执行按组合条件降序排序。
+*/
+void lxOrdersArraySort(TradesOrders     &myTO[],    //持仓单数组
+                       string           mySymbol,   //商品名称，Symbol()为当前图表商品名，"*"为所有商品
+                       int              mySeekMode  //排序类型 0-按建仓时间,1-按建仓价,2-按利润 3-按手数
+                      )  export
+{
+    int myArrayRange=ArraySize(myTO);   //数组边界变量
+    int i,j;                            //循环计数器变量
+    TradesOrders mySwapArray[1];        //交换数组变量
+    switch (mySeekMode)
+    {
+        case 0: //按建仓时间，结果是降序
+        {
+            for (i=0;i<myArrayRange;i++)
+            {
+                for (j=myArrayRange-1;j>i;j--)
+                {
+                    if (myTO[j].opentime>myTO[j-1].opentime)
+                    {
+                        mySwapArray[0].ticket     =myTO[j-1].ticket;
+                        mySwapArray[0].opentime   =myTO[j-1].opentime;
+                        mySwapArray[0].type       =myTO[j-1].type;
+                        mySwapArray[0].lots       =myTO[j-1].lots;
+                        mySwapArray[0].symbol     =myTO[j-1].symbol;
+                        mySwapArray[0].openprice  =myTO[j-1].openprice;
+                        mySwapArray[0].stoploss   =myTO[j-1].stoploss;
+                        mySwapArray[0].takeprofit =myTO[j-1].takeprofit;
+                        mySwapArray[0].commission =myTO[j-1].commission;
+                        mySwapArray[0].swap       =myTO[j-1].swap;
+                        mySwapArray[0].profit     =myTO[j-1].profit;
+                        mySwapArray[0].comment    =myTO[j-1].comment;
+                        mySwapArray[0].magicnumber=myTO[j-1].magicnumber;
+                        mySwapArray[0].cost       =myTO[j-1].cost;
+                        
+                        myTO[j-1].ticket     =myTO[j].ticket;
+                        myTO[j-1].opentime   =myTO[j].opentime;
+                        myTO[j-1].type       =myTO[j].type;
+                        myTO[j-1].lots       =myTO[j].lots;
+                        myTO[j-1].symbol     =myTO[j].symbol;
+                        myTO[j-1].openprice  =myTO[j].openprice;
+                        myTO[j-1].stoploss   =myTO[j].stoploss;
+                        myTO[j-1].takeprofit =myTO[j].takeprofit;
+                        myTO[j-1].commission =myTO[j].commission;
+                        myTO[j-1].swap       =myTO[j].swap;
+                        myTO[j-1].profit     =myTO[j].profit;
+                        myTO[j-1].comment    =myTO[j].comment;
+                        myTO[j-1].magicnumber=myTO[j].magicnumber;
+                        myTO[j-1].cost       =myTO[j].cost;
+                        
+                        myTO[j].ticket     =mySwapArray[0].ticket;
+                        myTO[j].opentime   =mySwapArray[0].opentime;
+                        myTO[j].type       =mySwapArray[0].type;
+                        myTO[j].lots       =mySwapArray[0].lots;
+                        myTO[j].symbol     =mySwapArray[0].symbol;
+                        myTO[j].openprice  =mySwapArray[0].openprice;
+                        myTO[j].stoploss   =mySwapArray[0].stoploss;
+                        myTO[j].takeprofit =mySwapArray[0].takeprofit;
+                        myTO[j].commission =mySwapArray[0].commission;
+                        myTO[j].swap       =mySwapArray[0].swap;
+                        myTO[j].profit     =mySwapArray[0].profit;
+                        myTO[j].comment    =mySwapArray[0].comment;
+                        myTO[j].magicnumber=mySwapArray[0].magicnumber;
+                        myTO[j].cost       =mySwapArray[0].cost;
+                    }
+                }
+            }
+            break;
+        }
+        case 1: //按建仓价，结果是降序
+        {
+            for (i=0;i<myArrayRange;i++)
+            {
+                for (j=myArrayRange-1;j>i;j--)
+                {
+                    if (myTO[j].openprice>myTO[j-1].openprice)
+                    {
+                        mySwapArray[0].ticket     =myTO[j-1].ticket;
+                        mySwapArray[0].opentime   =myTO[j-1].opentime;
+                        mySwapArray[0].type       =myTO[j-1].type;
+                        mySwapArray[0].lots       =myTO[j-1].lots;
+                        mySwapArray[0].symbol     =myTO[j-1].symbol;
+                        mySwapArray[0].openprice  =myTO[j-1].openprice;
+                        mySwapArray[0].stoploss   =myTO[j-1].stoploss;
+                        mySwapArray[0].takeprofit =myTO[j-1].takeprofit;
+                        mySwapArray[0].commission =myTO[j-1].commission;
+                        mySwapArray[0].swap       =myTO[j-1].swap;
+                        mySwapArray[0].profit     =myTO[j-1].profit;
+                        mySwapArray[0].comment    =myTO[j-1].comment;
+                        mySwapArray[0].magicnumber=myTO[j-1].magicnumber;
+                        mySwapArray[0].cost       =myTO[j-1].cost;
+                        
+                        myTO[j-1].ticket     =myTO[j].ticket;
+                        myTO[j-1].opentime   =myTO[j].opentime;
+                        myTO[j-1].type       =myTO[j].type;
+                        myTO[j-1].lots       =myTO[j].lots;
+                        myTO[j-1].symbol     =myTO[j].symbol;
+                        myTO[j-1].openprice  =myTO[j].openprice;
+                        myTO[j-1].stoploss   =myTO[j].stoploss;
+                        myTO[j-1].takeprofit =myTO[j].takeprofit;
+                        myTO[j-1].commission =myTO[j].commission;
+                        myTO[j-1].swap       =myTO[j].swap;
+                        myTO[j-1].profit     =myTO[j].profit;
+                        myTO[j-1].comment    =myTO[j].comment;
+                        myTO[j-1].magicnumber=myTO[j].magicnumber;
+                        myTO[j-1].cost       =myTO[j].cost;
+                        
+                        myTO[j].ticket     =mySwapArray[0].ticket;
+                        myTO[j].opentime   =mySwapArray[0].opentime;
+                        myTO[j].type       =mySwapArray[0].type;
+                        myTO[j].lots       =mySwapArray[0].lots;
+                        myTO[j].symbol     =mySwapArray[0].symbol;
+                        myTO[j].openprice  =mySwapArray[0].openprice;
+                        myTO[j].stoploss   =mySwapArray[0].stoploss;
+                        myTO[j].takeprofit =mySwapArray[0].takeprofit;
+                        myTO[j].commission =mySwapArray[0].commission;
+                        myTO[j].swap       =mySwapArray[0].swap;
+                        myTO[j].profit     =mySwapArray[0].profit;
+                        myTO[j].comment    =mySwapArray[0].comment;
+                        myTO[j].magicnumber=mySwapArray[0].magicnumber;
+                        myTO[j].cost       =mySwapArray[0].cost;
+                    }
+                }
+            }
+            break;
+        }
+        case 2: //按浮动利润，结果是降序
+        {
+            for (i=0;i<myArrayRange;i++)
+            {
+                for (j=myArrayRange-1;j>i;j--)
+                {
+                    if (myTO[j].profit>myTO[j-1].profit)
+                    {
+                        mySwapArray[0].ticket     =myTO[j-1].ticket;
+                        mySwapArray[0].opentime   =myTO[j-1].opentime;
+                        mySwapArray[0].type       =myTO[j-1].type;
+                        mySwapArray[0].lots       =myTO[j-1].lots;
+                        mySwapArray[0].symbol     =myTO[j-1].symbol;
+                        mySwapArray[0].openprice  =myTO[j-1].openprice;
+                        mySwapArray[0].stoploss   =myTO[j-1].stoploss;
+                        mySwapArray[0].takeprofit =myTO[j-1].takeprofit;
+                        mySwapArray[0].commission =myTO[j-1].commission;
+                        mySwapArray[0].swap       =myTO[j-1].swap;
+                        mySwapArray[0].profit     =myTO[j-1].profit;
+                        mySwapArray[0].comment    =myTO[j-1].comment;
+                        mySwapArray[0].magicnumber=myTO[j-1].magicnumber;
+                        mySwapArray[0].cost       =myTO[j-1].cost;
+                        
+                        myTO[j-1].ticket     =myTO[j].ticket;
+                        myTO[j-1].opentime   =myTO[j].opentime;
+                        myTO[j-1].type       =myTO[j].type;
+                        myTO[j-1].lots       =myTO[j].lots;
+                        myTO[j-1].symbol     =myTO[j].symbol;
+                        myTO[j-1].openprice  =myTO[j].openprice;
+                        myTO[j-1].stoploss   =myTO[j].stoploss;
+                        myTO[j-1].takeprofit =myTO[j].takeprofit;
+                        myTO[j-1].commission =myTO[j].commission;
+                        myTO[j-1].swap       =myTO[j].swap;
+                        myTO[j-1].profit     =myTO[j].profit;
+                        myTO[j-1].comment    =myTO[j].comment;
+                        myTO[j-1].magicnumber=myTO[j].magicnumber;
+                        myTO[j-1].cost       =myTO[j].cost;
+                        
+                        myTO[j].ticket     =mySwapArray[0].ticket;
+                        myTO[j].opentime   =mySwapArray[0].opentime;
+                        myTO[j].type       =mySwapArray[0].type;
+                        myTO[j].lots       =mySwapArray[0].lots;
+                        myTO[j].symbol     =mySwapArray[0].symbol;
+                        myTO[j].openprice  =mySwapArray[0].openprice;
+                        myTO[j].stoploss   =mySwapArray[0].stoploss;
+                        myTO[j].takeprofit =mySwapArray[0].takeprofit;
+                        myTO[j].commission =mySwapArray[0].commission;
+                        myTO[j].swap       =mySwapArray[0].swap;
+                        myTO[j].profit     =mySwapArray[0].profit;
+                        myTO[j].comment    =mySwapArray[0].comment;
+                        myTO[j].magicnumber=mySwapArray[0].magicnumber;
+                        myTO[j].cost       =mySwapArray[0].cost;
+                    }
+                }
+            }
+            break;
+        }
+        case 3: //按手数，结果是降序
+        {
+            for (i=0;i<myArrayRange;i++)
+            {
+                for (j=myArrayRange-1;j>i;j--)
+                {
+                    if (myTO[j].lots>myTO[j-1].lots)
+                    {
+                        mySwapArray[0].ticket     =myTO[j-1].ticket;
+                        mySwapArray[0].opentime   =myTO[j-1].opentime;
+                        mySwapArray[0].type       =myTO[j-1].type;
+                        mySwapArray[0].lots       =myTO[j-1].lots;
+                        mySwapArray[0].symbol     =myTO[j-1].symbol;
+                        mySwapArray[0].openprice  =myTO[j-1].openprice;
+                        mySwapArray[0].stoploss   =myTO[j-1].stoploss;
+                        mySwapArray[0].takeprofit =myTO[j-1].takeprofit;
+                        mySwapArray[0].commission =myTO[j-1].commission;
+                        mySwapArray[0].swap       =myTO[j-1].swap;
+                        mySwapArray[0].profit     =myTO[j-1].profit;
+                        mySwapArray[0].comment    =myTO[j-1].comment;
+                        mySwapArray[0].magicnumber=myTO[j-1].magicnumber;
+                        mySwapArray[0].cost       =myTO[j-1].cost;
+                        
+                        myTO[j-1].ticket     =myTO[j].ticket;
+                        myTO[j-1].opentime   =myTO[j].opentime;
+                        myTO[j-1].type       =myTO[j].type;
+                        myTO[j-1].lots       =myTO[j].lots;
+                        myTO[j-1].symbol     =myTO[j].symbol;
+                        myTO[j-1].openprice  =myTO[j].openprice;
+                        myTO[j-1].stoploss   =myTO[j].stoploss;
+                        myTO[j-1].takeprofit =myTO[j].takeprofit;
+                        myTO[j-1].commission =myTO[j].commission;
+                        myTO[j-1].swap       =myTO[j].swap;
+                        myTO[j-1].profit     =myTO[j].profit;
+                        myTO[j-1].comment    =myTO[j].comment;
+                        myTO[j-1].magicnumber=myTO[j].magicnumber;
+                        myTO[j-1].cost       =myTO[j].cost;
+                        
+                        myTO[j].ticket     =mySwapArray[0].ticket;
+                        myTO[j].opentime   =mySwapArray[0].opentime;
+                        myTO[j].type       =mySwapArray[0].type;
+                        myTO[j].lots       =mySwapArray[0].lots;
+                        myTO[j].symbol     =mySwapArray[0].symbol;
+                        myTO[j].openprice  =mySwapArray[0].openprice;
+                        myTO[j].stoploss   =mySwapArray[0].stoploss;
+                        myTO[j].takeprofit =mySwapArray[0].takeprofit;
+                        myTO[j].commission =mySwapArray[0].commission;
+                        myTO[j].swap       =mySwapArray[0].swap;
+                        myTO[j].profit     =mySwapArray[0].profit;
+                        myTO[j].comment    =mySwapArray[0].comment;
+                        myTO[j].magicnumber=mySwapArray[0].magicnumber;
+                        myTO[j].cost       =mySwapArray[0].cost;
+                    }
+                }
+            }
+            break;
+        }
+    } 
+    return;
+}
+/*
+函    数：订单交易类型检测，检测订单交易类型是否是条件允许的类型
+输入参数：
+输出参数：true:是   false：不是
+算    法:
+*/
+bool lxDetectionType(int mySourceType,  //源订单类型
+                     int mySelectType   //订单类型， 0-Buy,1-Sell,2-BuyLimit,3-SellLimit,4-BuyStop,5-SellStop,9-所有
+                                        //           10-(Buy和Sell),11-(所有挂单),12-(所有多类型),13-(所有空类型), 
+                                        //           14-(多挂单),15-(空挂单)                    
+                     )
+{
+   switch(mySelectType)
+   {
+      case 0 : return(mySourceType==OP_BUY      ); break;
+      case 1 : return(mySourceType==OP_SELL     ); break;
+      case 2 : return(mySourceType==OP_BUYLIMIT ); break;
+      case 3 : return(mySourceType==OP_SELLLIMIT); break;
+      case 4 : return(mySourceType==OP_BUYSTOP  ); break;
+      case 5 : return(mySourceType==OP_SELLSTOP ); break;
+      case 9 : {return(true); break;}  //所有订单
+      case 10 : {if(mySourceType==OP_BUY || mySourceType==OP_SELL) return(true); break;}//成交的持仓单
+      case 11 : {if(mySourceType>1 && mySourceType<6) return(true); break;}  //所有挂单
+      case 12 : {if(mySourceType==OP_BUY || mySourceType==OP_BUYLIMIT || mySourceType==OP_BUYSTOP) return(true); break;}  //Buy的成交和挂单
+      case 13 : {if(mySourceType==OP_SELL || mySourceType==OP_SELLLIMIT || mySourceType==OP_SELLSTOP) return(true); break;}  //Sell的成交和挂单
+      case 14 : {if(mySourceType==OP_BUYLIMIT || mySourceType==OP_BUYSTOP) return(true); break;}  //Sell的成交和挂单
+      case 15 : {if(mySourceType==OP_SELLLIMIT || mySourceType==OP_SELLSTOP) return(true); break;} //Sell的成交和挂单
+   }
+   return(false);
+}  
+//为编辑框初始赋值
+void lxEdit_Input(MenuControl  &myMC,
+                   EditStatus   &myEdit,
+                   string  myButtonName,       //按钮名称，控制用
+                   string  myText,       //显示的标题
+                   string  myValue,      //编辑的值
+                   int     myType,       //数据类型
+                   const   int     myDigits = 0,               
+                   const   int     myFontSize = 8,           //显示文字大小
+                   const   string  myHelp ="",                   //提示信息
+                   const   string  myFont = "微软雅黑",       //字体
+                   const   color   myColorBack = clrRosyBrown,     //背景色
+                   const   color   myColorBorder = clrWhite,  //边框色
+                 //const  int     x,           //位置x
+                 //const  int     y,           //位置y
+                 //const  int     k,           //宽
+                 //const  int     g,           //高                    
+                )   export               
+{
+    myEdit.name        = myMC.name+myButtonName;
+    myEdit.text        = myText;    
+    myEdit.edit        = myValue;
+    myEdit.type        = myType;
+    myEdit.digits      = myDigits;
+    myEdit.fontsize    = myFontSize;     //显示文字大小
+    myEdit.help        = myHelp;         //提示信息
+    myEdit.font        = myFont;         //字体
+    myEdit.backcolor   = myColorBack;
+    myEdit.bordercolor = myColorBorder;
+}  
+/*
+函    数：编辑框内容确认
+输入参数：编辑框名称，&编辑的变量，提示消息
+输出参数：
+算    法:
+*/
+void  lxEditES(long        myChartID,  
+                EditStatus &myES,
+               ) export
+{
+   if (ObjectFind(0,myES.name)==-1) return;
+   string myTemp=myES.edit;
+   string myInput=ObjectGetString(myChartID,myES.name,OBJPROP_TEXT);
+   int    myLen=StringLen(myInput);
+   int    myVal=0;      //输入字符的键值
+   bool   myPass=true;  //检测是否通过
+   for(int i=0;i<myLen;i++)
+   {
+      myVal=StringGetChar(myInput,i);
+      if(   ((myVal<48 || myVal>57) && myVal!=45 && myES.type==0)
+         || (((myVal<48 && myVal!=46 && myVal!=45) || myVal>57) && myES.type==1)  //45是负号//.是46
+         ) 
+      {
+         myPass=false;
+         break;
+      }
+   }
+   if (myPass==false)// || (myPass==true && StringToDouble(myInput)==0.0))  
+   {
+      myES.edit=myTemp;
+   }
+   else
+   {
+      myES.edit=myInput;
+   }
+   if (myES.type==0 || myES.type==2) ObjectSetString(myChartID,myES.name,OBJPROP_TEXT,myES.edit); //设置文本
+   if (myES.type==1) 
+   {
+      ObjectSetString(myChartID,myES.name,OBJPROP_TEXT,DoubleToStr((double)myES.edit,myES.digits)); //设置文本
+      myES.edit=DoubleToStr((double)myES.edit,myES.digits);
+   } 
+}  
+//通用画线函数
+void  lxLineDraw(string     ln_text,         //线条文字
+                 string     ln_prefix,       //线条名称前缀
+                 int  const ln_number=3,     //画线数量
+                 int  const ln_linewidth=25, //按钮行距
+                 int  const ln_x=10,         //按钮初始x位置
+                 int  const ln_y=50,         //按钮初始y位置
+                )
+{
+   int  bt_count=0;      //计数画按钮的个数，达到后换行
+   int  bt_linenumber=0; //按钮行数计数用
+   for (int i=0;i<ln_number;i++)
+   {      
+      lxLableOut(true,ln_text,ln_prefix+"line"+(string)i,10,clrGray,0,0,0,ln_x,ln_y+lxScale(i*ln_linewidth));
+   } 
+} 
+//通用画编辑函数
+void  lxEditDraw(MenuControl  &myMC,
+                 int  bt_number=2,            //每行显示的编辑框数量
+                 int  const bt_start=0,       //编辑框开始的序号
+                 int  const bt_end=3,         //编辑框结束的序号
+                 int  const bt_width=44,      //编辑框的宽度
+                 int  const bt_interval=104,  //编辑框间距
+                 int  const bt_height=22,     //编辑框高度
+                 int  const bt_linewidth=25,  //编辑框行距
+                 int  const bt_x1=8,          //编辑框文字x位置
+                 int  const bt_x2=64,         //编辑框x位置
+                 int  const bt_y=50,          //编辑框初始y位置
+                )
+{
+   int  bt_count=0;      //计数画按钮的个数，达到后换行
+   int  bt_linenumber=0; //按钮行数计数用
+   for (int i=bt_start;i<=bt_end;i++)
+   {      
+      if (bt_count==bt_number)  {bt_count=0;bt_linenumber++;}
+      lxLableOut(true,myMC.ES[i].text,myMC.ES[i].name+"text",10,clrWhite,0,0,0,myMC.x+lxScale(bt_x1+bt_count*bt_interval),myMC.y+lxScale(bt_y+bt_linenumber*bt_linewidth),"微软雅黑");
+      lxEditOut(true,0,myMC.ES[i].name,0,myMC.x+lxScale(bt_x2+bt_count*bt_interval),myMC.y+lxScale(bt_y+bt_linenumber*bt_linewidth),lxScale(bt_width),lxScale(bt_height),myMC.ES[i].edit,"微软雅黑",10,ALIGN_CENTER,0,0,clrWhite,clrRosyBrown,clrWhite);
+      bt_count++;
+   } 
+}   
+  
+  
